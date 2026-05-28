@@ -89,8 +89,33 @@ public final class HookTransformResolver {
             if (isInvalid(localPos)) return;
 
             DynamicHookMap.put(hookPoint, new DynamicHookData(slId, localPos));
-            DAOTCompat.LOGGER.info("[daotcompat] {}: hook ATTACHED to sublevel {} (worldPos={}, localPos={})",
-                    side, slId, fmt(worldPos), fmt(localPos));
+            // Full diagnostic on attach: pose components + (best-effort) player position so
+            // we can verify whether AOT's reported world coord matches the airship's visual
+            // location, or whether Sable's clip mixin returned a frame-mismatched coord.
+            Pose3dc poseDbg = sl.logicalPose();
+            DAOTCompat.LOGGER.info(
+                    "[daotcompat] {}: hook ATTACHED sublevel={} world={} local={}\n" +
+                    "    pose.position    = {}\n" +
+                    "    pose.rotationPt  = {}\n" +
+                    "    pose.orientation = {}\n" +
+                    "    pose.scale       = {}",
+                    side, slId, fmt(worldPos), fmt(localPos),
+                    fmtJoml(poseDbg.position()),
+                    fmtJoml(poseDbg.rotationPoint()),
+                    poseDbg.orientation() == null ? "null" :
+                            String.format(java.util.Locale.ROOT, "(%.4f, %.4f, %.4f, %.4f)",
+                                    poseDbg.orientation().x(), poseDbg.orientation().y(),
+                                    poseDbg.orientation().z(), poseDbg.orientation().w()),
+                    fmtJoml(poseDbg.scale()));
+            try {
+                net.minecraft.client.player.LocalPlayer p =
+                        net.minecraft.client.Minecraft.getInstance().player;
+                if (p != null) {
+                    DAOTCompat.LOGGER.info(
+                            "[daotcompat] {}: player at {} | hook→player Δ = {}",
+                            side, fmt(p.position()), fmt(p.position().subtract(worldPos)));
+                }
+            } catch (Throwable ignored) { /* main-menu / no player */ }
             transition(side, LastState.TRACKING);
             return;
         }
