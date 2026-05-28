@@ -8,7 +8,9 @@
     "HookPointMixin",
     "accessor.HookPointAccessor"
   ],
-  "client": [],
+  "client": [
+    "client.ODMTickHandlerMixin"
+  ],
   "server": [],
   "injectors": {
     "defaultRequire": 1
