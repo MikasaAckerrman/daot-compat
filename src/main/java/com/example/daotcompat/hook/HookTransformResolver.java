@@ -120,10 +120,13 @@ public final class HookTransformResolver {
         }
 
         AOTReflect.setPosition(hookPoint, newWorldPos);
-        // Periodic heartbeat while tracking (~ once per 2s)
-        if (tickCounter.incrementAndGet() % 40 == 0) {
-            DAOTCompat.LOGGER.debug("[daotcompat] {}: tracking, world={}, local={}",
-                    side, fmt(newWorldPos), fmt(data.localPosition()));
+        // Heartbeat while tracking (every 20 ticks ~ 1s) — INFO level so it shows up
+        // in default log filtering. Includes player-to-hook distance so we can see if
+        // AOT releases due to maxRopeLength validation.
+        if (tickCounter.incrementAndGet() % 20 == 0) {
+            DAOTCompat.LOGGER.info(
+                    "[daotcompat] {}: tracking world={}",
+                    side, fmt(newWorldPos));
         }
     }
 
@@ -136,7 +139,10 @@ public final class HookTransformResolver {
     }
 
     private static String fmt(Vec3 v) {
-        return v == null ? "null" : String.format("(%.2f,%.2f,%.2f)", v.x, v.y, v.z);
+        // Locale.ROOT to force '.' decimal separator — RU locale was rendering
+        // (x.xx, y.yy, z.zz) as "(x,xx, y,yy, z,zz)" which looked like 6 numbers in the log.
+        return v == null ? "null"
+                : String.format(java.util.Locale.ROOT, "(%.2f, %.2f, %.2f)", v.x, v.y, v.z);
     }
 
     private static void releaseAndClear(Object hookPoint, String reason) {
