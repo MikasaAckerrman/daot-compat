@@ -119,14 +119,41 @@ public final class HookTransformResolver {
             return;
         }
 
+        // Sanity-check: how far did our recompute diverge from AOT's stored position?
+        // - tiny diff (< 0.001m) — pose effectively unchanged, leave AOT's value alone
+        //   (avoids floating-point jitter that would destabilise rope physics)
+        // - small diff (< 32m) — ship moved, normal — apply update
+        // - huge diff (≥ 32m) — symptom of bad math (wrong rotationPoint frame etc.); REFUSE the
+        //   write and log loudly so we surface the bug instead of teleporting the player away.
+        double divergeSqr = worldPos.distanceToSqr(newWorldPos);
+        if (divergeSqr < 0.000001) {
+            recordTracking(side, worldPos, divergeSqr, false);
+            return;
+        }
+        if (divergeSqr >= 1024.0) {
+            DAOTCompat.LOGGER.warn(
+                    "[daotcompat] {}: REFUSED huge transform jump: stored={} computed={} delta={}m  "
+                            + "pose=[pos={}]  local={}",
+                    side, fmt(worldPos), fmt(newWorldPos),
+                    String.format(java.util.Locale.ROOT, "%.2f", Math.sqrt(divergeSqr)),
+                    fmtJoml(sl.logicalPose().position()),
+                    fmt(data.localPosition()));
+            recordTracking(side, worldPos, divergeSqr, false);
+            return;
+        }
+
         AOTReflect.setPosition(hookPoint, newWorldPos);
-        // Heartbeat while tracking (every 20 ticks ~ 1s) — INFO level so it shows up
-        // in default log filtering. Includes player-to-hook distance so we can see if
-        // AOT releases due to maxRopeLength validation.
+        recordTracking(side, newWorldPos, divergeSqr, true);
+    }
+
+    private static void recordTracking(String side, Vec3 pos, double divergeSqr, boolean updated) {
+        // 1 Hz heartbeat — also marks whether we wrote a new position this tick.
         if (tickCounter.incrementAndGet() % 20 == 0) {
             DAOTCompat.LOGGER.info(
-                    "[daotcompat] {}: tracking world={}",
-                    side, fmt(newWorldPos));
+                    "[daotcompat] {}: tracking world={} delta={}m {}",
+                    side, fmt(pos),
+                    String.format(java.util.Locale.ROOT, "%.4f", Math.sqrt(divergeSqr)),
+                    updated ? "(applied)" : "(no-op)");
         }
     }
 
@@ -143,6 +170,11 @@ public final class HookTransformResolver {
         // (x.xx, y.yy, z.zz) as "(x,xx, y,yy, z,zz)" which looked like 6 numbers in the log.
         return v == null ? "null"
                 : String.format(java.util.Locale.ROOT, "(%.2f, %.2f, %.2f)", v.x, v.y, v.z);
+    }
+
+    private static String fmtJoml(org.joml.Vector3dc v) {
+        return v == null ? "null"
+                : String.format(java.util.Locale.ROOT, "(%.2f, %.2f, %.2f)", v.x(), v.y(), v.z());
     }
 
     private static void releaseAndClear(Object hookPoint, String reason) {
