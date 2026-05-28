@@ -1,0 +1,31 @@
+# Gradle
+.gradle/
+build/
+out/
+!**/src/**/build/
+!**/src/**/out/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.eclipse/
+.classpath
+.project
+.settings/
+
+# NeoForge / Minecraft
+run/
+runs/
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local
+*.local
+local.properties
