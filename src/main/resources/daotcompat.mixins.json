@@ -4,10 +4,7 @@
   "package": "com.example.daotcompat.mixin",
   "compatibilityLevel": "JAVA_21",
   "refmap": "daotcompat.refmap.json",
-  "mixins": [
-    "HookPointMixin",
-    "accessor.HookPointAccessor"
-  ],
+  "mixins": [],
   "client": [
     "client.LocalPlayerTickMixin"
   ],

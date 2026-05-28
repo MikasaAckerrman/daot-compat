@@ -1,7 +1,7 @@
 package com.example.daotcompat.hook;
 
 import com.example.daotcompat.DAOTCompat;
-import com.example.daotcompat.mixin.accessor.HookPointAccessor;
+import com.example.daotcompat.aot.HookPointReflect;
 import com.example.daotcompat.sable.SableBridge;
 import com.example.daotcompat.sable.SubLevelResolver;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
@@ -10,65 +10,64 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.UUID;
+
 /**
  * Per-tick logic that keeps {@code daot.HookPoint.position} in sync with a moving
  * Sable sub-level.
  *
- * <p>Called once per active hook from {@code daot.ODMTickHandler#applyHookMovement}
- * (HEAD inject). One method handles both first-tick attach detection and subsequent
- * world-space re-projection — keeps the hot path branch-flat and the call-sites in
- * the mixin to a single line each.
+ * <p>Reads/writes {@code HookPoint} state through {@link HookPointReflect} (reflection on
+ * its public fields) and stores per-hook compat data in {@link DynamicHookMap} (external
+ * {@link java.util.WeakHashMap}). This bypass avoids the Mixin-on-Fabric-class issue
+ * observed under Sinytra Connector, where {@code @Accessor} method bodies were not
+ * generated, producing {@link AbstractMethodError} at first call.
+ *
+ * <p>Called from {@link com.example.daotcompat.mixin.client.LocalPlayerTickMixin} HEAD
+ * once per client tick &mdash; before AOT consumes the hook position in its own
+ * post-tick callback.
  */
 public final class HookTransformResolver {
 
     private HookTransformResolver() {}
 
     /**
-     * @param level     the world the player is currently in (must not be null)
-     * @param hookPoint a {@code daot.HookPoint} instance (Object-typed — type belongs to AOT jar)
+     * @param level     the world the local player is in (must not be null)
+     * @param hookPoint a {@code daot.HookPoint} instance from {@code ODMTickHandler}
      */
     public static void process(@Nullable Level level, @Nullable Object hookPoint) {
         if (level == null || hookPoint == null) return;
-
-        // Cast through duck-typing interfaces injected by our mixins.
-        // If the cast fails, our mixins didn't apply — bail out silently.
-        DynamicHookStorage storage;
-        HookPointAccessor accessor;
-        try {
-            storage = (DynamicHookStorage) hookPoint;
-            accessor = (HookPointAccessor) hookPoint;
-        } catch (ClassCastException e) {
-            return;
-        }
+        if (!HookPointReflect.isAvailable()) return;
 
         // Inactive hook: clear any stale dynamic data and exit.
-        if (!accessor.daotCompat$isActive()) {
-            if (storage.daotCompat$getDynamicData() != null) {
-                storage.daotCompat$setDynamicData(null);
+        if (!HookPointReflect.isActive(hookPoint)) {
+            if (DynamicHookMap.get(hookPoint) != null) {
+                DynamicHookMap.put(hookPoint, null);
             }
             return;
         }
 
         // Entity hook (e.g. on a titan): AOT updates position itself via updateEntityPosition().
         // We must not interfere — clear our data if it lingered from a previous block-hook.
-        if (accessor.daotCompat$getHookedEntity() != null) {
-            if (storage.daotCompat$getDynamicData() != null) {
-                storage.daotCompat$setDynamicData(null);
+        if (HookPointReflect.isOnEntity(hookPoint)) {
+            if (DynamicHookMap.get(hookPoint) != null) {
+                DynamicHookMap.put(hookPoint, null);
             }
             return;
         }
 
-        Object posObj = accessor.daotCompat$getPosition();
-        if (!(posObj instanceof Vec3 worldPos)) return;
+        Vec3 worldPos = HookPointReflect.getPosition(hookPoint);
+        if (worldPos == null || isInvalid(worldPos)) return;
 
-        DynamicHookData data = storage.daotCompat$getDynamicData();
+        DynamicHookData data = DynamicHookMap.get(hookPoint);
 
         if (data == null) {
             // First tick after attach: probe sub-level and capture local-space anchor.
             SubLevel sl = SubLevelResolver.findContaining(level, worldPos);
             if (sl == null) return; // vanilla world hook — nothing to do
-            java.util.UUID slId = sl.getUniqueId();
+
+            UUID slId = sl.getUniqueId();
             if (slId == null) return; // sub-level not fully initialised yet, retry next tick
+
             Vec3 localPos;
             try {
                 Pose3dc pose = sl.logicalPose();
@@ -78,7 +77,8 @@ public final class HookTransformResolver {
                 return;
             }
             if (isInvalid(localPos)) return;
-            storage.daotCompat$setDynamicData(new DynamicHookData(slId, localPos));
+
+            DynamicHookMap.put(hookPoint, new DynamicHookData(slId, localPos));
             return;
         }
 
@@ -86,7 +86,7 @@ public final class HookTransformResolver {
         SubLevel sl = SableBridge.getSubLevel(level, data.subLevelId());
         if (sl == null) {
             // Sub-level unloaded or removed — release the hook so the player isn't yanked.
-            releaseAndClear(accessor, storage, "subLevel unloaded");
+            releaseAndClear(hookPoint, "subLevel unloaded");
             return;
         }
 
@@ -94,28 +94,22 @@ public final class HookTransformResolver {
         try {
             newWorldPos = sl.logicalPose().transformPosition(data.localPosition());
         } catch (Throwable t) {
-            releaseAndClear(accessor, storage, "transform threw: " + t.getClass().getSimpleName());
+            releaseAndClear(hookPoint, "transform threw: " + t.getClass().getSimpleName());
             return;
         }
 
         if (isInvalid(newWorldPos)) {
-            releaseAndClear(accessor, storage, "transform produced NaN/Inf");
+            releaseAndClear(hookPoint, "transform produced NaN/Inf");
             return;
         }
 
-        accessor.daotCompat$setPosition(newWorldPos);
+        HookPointReflect.setPosition(hookPoint, newWorldPos);
     }
 
-    private static void releaseAndClear(HookPointAccessor accessor,
-                                        DynamicHookStorage storage,
-                                        String reason) {
+    private static void releaseAndClear(Object hookPoint, String reason) {
         DAOTCompat.LOGGER.debug("[daotcompat] releasing hook: {}", reason);
-        try {
-            accessor.daotCompat$invokeRelease();
-        } catch (Throwable t) {
-            DAOTCompat.LOGGER.warn("[daotcompat] release() invoker threw", t);
-        }
-        storage.daotCompat$setDynamicData(null);
+        HookPointReflect.release(hookPoint);
+        DynamicHookMap.put(hookPoint, null);
     }
 
     private static boolean isInvalid(@Nullable Vec3 v) {
