@@ -11,6 +11,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Per-tick logic that keeps {@code daot.HookPoint.position} in sync with a moving
@@ -19,36 +20,42 @@ import java.util.UUID;
  * <p>Reads/writes {@code HookPoint} state through {@link HookPointReflect} (reflection on
  * its public fields) and stores per-hook compat data in {@link DynamicHookMap} (external
  * {@link java.util.WeakHashMap}). This bypass avoids the Mixin-on-Fabric-class issue
- * observed under Sinytra Connector, where {@code @Accessor} method bodies were not
- * generated, producing {@link AbstractMethodError} at first call.
+ * observed under Sinytra Connector.
  *
- * <p>Called from {@link com.example.daotcompat.mixin.client.LocalPlayerTickMixin} HEAD
- * once per client tick &mdash; before AOT consumes the hook position in its own
- * post-tick callback.
+ * <p>Diagnostic logging is rate-limited (every 40 ticks ~= 2s) and gated on state
+ * transitions to keep the log readable while still exposing what's happening.
  */
 public final class HookTransformResolver {
+
+    /** Per-side state we observed last tick — used to gate logs to transitions only. */
+    private enum LastState { NONE, INACTIVE, ENTITY, NO_SUBLEVEL, TRACKING }
+
+    private static LastState lastLeft = LastState.NONE;
+    private static LastState lastRight = LastState.NONE;
+    private static final AtomicLong tickCounter = new AtomicLong();
 
     private HookTransformResolver() {}
 
     /**
      * @param level     the world the local player is in (must not be null)
      * @param hookPoint a {@code daot.HookPoint} instance from {@code ODMTickHandler}
+     * @param side      "L" or "R" — for log prefixing
      */
-    public static void process(@Nullable Level level, @Nullable Object hookPoint) {
+    public static void process(@Nullable Level level, @Nullable Object hookPoint, String side) {
         if (level == null || hookPoint == null) return;
         if (!HookPointReflect.isAvailable()) return;
 
-        // Inactive hook: clear any stale dynamic data and exit.
-        if (!HookPointReflect.isActive(hookPoint)) {
+        boolean active = HookPointReflect.isActive(hookPoint);
+        if (!active) {
+            transition(side, LastState.INACTIVE);
             if (DynamicHookMap.get(hookPoint) != null) {
                 DynamicHookMap.put(hookPoint, null);
             }
             return;
         }
 
-        // Entity hook (e.g. on a titan): AOT updates position itself via updateEntityPosition().
-        // We must not interfere — clear our data if it lingered from a previous block-hook.
         if (HookPointReflect.isOnEntity(hookPoint)) {
+            transition(side, LastState.ENTITY);
             if (DynamicHookMap.get(hookPoint) != null) {
                 DynamicHookMap.put(hookPoint, null);
             }
@@ -63,29 +70,36 @@ public final class HookTransformResolver {
         if (data == null) {
             // First tick after attach: probe sub-level and capture local-space anchor.
             SubLevel sl = SubLevelResolver.findContaining(level, worldPos);
-            if (sl == null) return; // vanilla world hook — nothing to do
+            if (sl == null) {
+                transition(side, LastState.NO_SUBLEVEL);
+                return; // vanilla world hook — nothing to do
+            }
 
             UUID slId = sl.getUniqueId();
-            if (slId == null) return; // sub-level not fully initialised yet, retry next tick
+            if (slId == null) return;
 
             Vec3 localPos;
             try {
                 Pose3dc pose = sl.logicalPose();
                 localPos = pose.transformPositionInverse(worldPos);
             } catch (Throwable t) {
-                DAOTCompat.LOGGER.debug("[daotcompat] inverse transform failed at attach", t);
+                DAOTCompat.LOGGER.debug("[daotcompat] {}: inverse transform failed at attach", side, t);
                 return;
             }
             if (isInvalid(localPos)) return;
 
             DynamicHookMap.put(hookPoint, new DynamicHookData(slId, localPos));
+            DAOTCompat.LOGGER.info("[daotcompat] {}: hook ATTACHED to sublevel {} (worldPos={}, localPos={})",
+                    side, slId, fmt(worldPos), fmt(localPos));
+            transition(side, LastState.TRACKING);
             return;
         }
 
         // Subsequent ticks: re-project local → world using the sub-level's CURRENT pose.
         SubLevel sl = SableBridge.getSubLevel(level, data.subLevelId());
         if (sl == null) {
-            // Sub-level unloaded or removed — release the hook so the player isn't yanked.
+            DAOTCompat.LOGGER.info("[daotcompat] {}: sublevel {} unloaded — releasing hook",
+                    side, data.subLevelId());
             releaseAndClear(hookPoint, "subLevel unloaded");
             return;
         }
@@ -94,16 +108,35 @@ public final class HookTransformResolver {
         try {
             newWorldPos = sl.logicalPose().transformPosition(data.localPosition());
         } catch (Throwable t) {
+            DAOTCompat.LOGGER.warn("[daotcompat] {}: transform threw {} — releasing", side, t);
             releaseAndClear(hookPoint, "transform threw: " + t.getClass().getSimpleName());
             return;
         }
 
         if (isInvalid(newWorldPos)) {
+            DAOTCompat.LOGGER.warn("[daotcompat] {}: NaN/Inf in transform output — releasing", side);
             releaseAndClear(hookPoint, "transform produced NaN/Inf");
             return;
         }
 
         HookPointReflect.setPosition(hookPoint, newWorldPos);
+        // Periodic heartbeat while tracking (~ once per 2s)
+        if (tickCounter.incrementAndGet() % 40 == 0) {
+            DAOTCompat.LOGGER.debug("[daotcompat] {}: tracking, world={}, local={}",
+                    side, fmt(newWorldPos), fmt(data.localPosition()));
+        }
+    }
+
+    private static void transition(String side, LastState next) {
+        LastState prev = "L".equals(side) ? lastLeft : lastRight;
+        if (prev == next) return;
+        if ("L".equals(side)) lastLeft = next; else lastRight = next;
+        // Log every meaningful state transition once
+        DAOTCompat.LOGGER.info("[daotcompat] {}: state {} -> {}", side, prev, next);
+    }
+
+    private static String fmt(Vec3 v) {
+        return v == null ? "null" : String.format("(%.2f,%.2f,%.2f)", v.x, v.y, v.z);
     }
 
     private static void releaseAndClear(Object hookPoint, String reason) {

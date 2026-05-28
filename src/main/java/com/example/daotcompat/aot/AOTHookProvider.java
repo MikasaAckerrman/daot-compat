@@ -3,45 +3,54 @@ package com.example.daotcompat.aot;
 import com.example.daotcompat.DAOTCompat;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 /**
  * Null-safe wrapper around Danny's AOT static accessors.
  *
- * <p>Why this class exists, not direct {@code daot.ODMTickHandler.getLeftHook()} calls:
- * <ul>
- *   <li>Isolates the AOT class reference into one place — easy to swap if AOT renames.</li>
- *   <li>{@link Throwable} catch covers both {@link NoClassDefFoundError} (AOT not installed)
- *       and any unexpected runtime errors inside the AOT static initializer.</li>
- *   <li>Returns {@link Object} so callers cast through {@code DynamicHookStorage}/{@code HookPointAccessor}
- *       — same pattern as elsewhere, runtime-safe under Sinytra Connector.</li>
- * </ul>
- *
- * <p>The reference to {@code daot.ODMTickHandler} is resolved lazily at the first call —
- * a JVM does not load the class until the bytecode reaches the static call site, so
- * this provider class itself loads fine even on a dedicated server where AOT may not
- * be present (though our mods.toml requires it client-side).
+ * <p>Logs the first non-null result from each side once — useful for confirming AOT
+ * is actually creating HookPoint instances when the player wears ODM gear. If the
+ * "first non-null" message never appears, AOT's {@code ODMTickHandler.register()}
+ * may not be running, or AOT is loading but ODM is disabled.
  */
 public final class AOTHookProvider {
 
+    private static final AtomicBoolean firstLeftSeen = new AtomicBoolean();
+    private static final AtomicBoolean firstRightSeen = new AtomicBoolean();
+    private static final AtomicBoolean errorLogged = new AtomicBoolean();
+
     private AOTHookProvider() {}
 
-    /** @return left-hand hook of the local player, or {@code null} if AOT is unavailable. */
     @Nullable
     public static Object getLeftHook() {
         try {
-            return daot.ODMTickHandler.getLeftHook();
+            Object h = daot.ODMTickHandler.getLeftHook();
+            if (h != null && firstLeftSeen.compareAndSet(false, true)) {
+                DAOTCompat.LOGGER.info("[daotcompat] first non-null LEFT hook observed: {}",
+                        h.getClass().getName());
+            }
+            return h;
         } catch (Throwable t) {
-            DAOTCompat.LOGGER.debug("[daotcompat] ODMTickHandler.getLeftHook() failed", t);
+            if (errorLogged.compareAndSet(false, true)) {
+                DAOTCompat.LOGGER.warn("[daotcompat] AOT.getLeftHook unavailable: {}", t.toString());
+            }
             return null;
         }
     }
 
-    /** @return right-hand hook of the local player, or {@code null} if AOT is unavailable. */
     @Nullable
     public static Object getRightHook() {
         try {
-            return daot.ODMTickHandler.getRightHook();
+            Object h = daot.ODMTickHandler.getRightHook();
+            if (h != null && firstRightSeen.compareAndSet(false, true)) {
+                DAOTCompat.LOGGER.info("[daotcompat] first non-null RIGHT hook observed: {}",
+                        h.getClass().getName());
+            }
+            return h;
         } catch (Throwable t) {
-            DAOTCompat.LOGGER.debug("[daotcompat] ODMTickHandler.getRightHook() failed", t);
+            if (errorLogged.compareAndSet(false, true)) {
+                DAOTCompat.LOGGER.warn("[daotcompat] AOT.getRightHook unavailable: {}", t.toString());
+            }
             return null;
         }
     }

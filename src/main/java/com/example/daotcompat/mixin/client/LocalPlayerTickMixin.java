@@ -39,7 +39,7 @@ public abstract class LocalPlayerTickMixin {
 
         LocalPlayer self = (LocalPlayer) (Object) this;
         Level level = self.level();
-        HookTransformResolver.process(level, leftHook);
-        HookTransformResolver.process(level, rightHook);
+        HookTransformResolver.process(level, leftHook, "L");
+        HookTransformResolver.process(level, rightHook, "R");
     }
 }
