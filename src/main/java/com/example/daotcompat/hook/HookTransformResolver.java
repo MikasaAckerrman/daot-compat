@@ -1,7 +1,7 @@
 package com.example.daotcompat.hook;
 
 import com.example.daotcompat.DAOTCompat;
-import com.example.daotcompat.aot.HookPointReflect;
+import com.example.daotcompat.aot.AOTReflect;
 import com.example.daotcompat.sable.SableBridge;
 import com.example.daotcompat.sable.SubLevelResolver;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * Per-tick logic that keeps {@code daot.HookPoint.position} in sync with a moving
  * Sable sub-level.
  *
- * <p>Reads/writes {@code HookPoint} state through {@link HookPointReflect} (reflection on
+ * <p>Reads/writes {@code HookPoint} state through {@link AOTReflect} (reflection on
  * its public fields) and stores per-hook compat data in {@link DynamicHookMap} (external
  * {@link java.util.WeakHashMap}). This bypass avoids the Mixin-on-Fabric-class issue
  * observed under Sinytra Connector.
@@ -43,9 +43,9 @@ public final class HookTransformResolver {
      */
     public static void process(@Nullable Level level, @Nullable Object hookPoint, String side) {
         if (level == null || hookPoint == null) return;
-        if (!HookPointReflect.isAvailable()) return;
+        if (!AOTReflect.isAvailable()) return;
 
-        boolean active = HookPointReflect.isActive(hookPoint);
+        boolean active = AOTReflect.isActive(hookPoint);
         if (!active) {
             transition(side, LastState.INACTIVE);
             if (DynamicHookMap.get(hookPoint) != null) {
@@ -54,7 +54,7 @@ public final class HookTransformResolver {
             return;
         }
 
-        if (HookPointReflect.isOnEntity(hookPoint)) {
+        if (AOTReflect.isOnEntity(hookPoint)) {
             transition(side, LastState.ENTITY);
             if (DynamicHookMap.get(hookPoint) != null) {
                 DynamicHookMap.put(hookPoint, null);
@@ -62,7 +62,7 @@ public final class HookTransformResolver {
             return;
         }
 
-        Vec3 worldPos = HookPointReflect.getPosition(hookPoint);
+        Vec3 worldPos = AOTReflect.getPosition(hookPoint);
         if (worldPos == null || isInvalid(worldPos)) return;
 
         DynamicHookData data = DynamicHookMap.get(hookPoint);
@@ -119,7 +119,7 @@ public final class HookTransformResolver {
             return;
         }
 
-        HookPointReflect.setPosition(hookPoint, newWorldPos);
+        AOTReflect.setPosition(hookPoint, newWorldPos);
         // Periodic heartbeat while tracking (~ once per 2s)
         if (tickCounter.incrementAndGet() % 40 == 0) {
             DAOTCompat.LOGGER.debug("[daotcompat] {}: tracking, world={}, local={}",
@@ -141,7 +141,7 @@ public final class HookTransformResolver {
 
     private static void releaseAndClear(Object hookPoint, String reason) {
         DAOTCompat.LOGGER.debug("[daotcompat] releasing hook: {}", reason);
-        HookPointReflect.release(hookPoint);
+        AOTReflect.release(hookPoint);
         DynamicHookMap.put(hookPoint, null);
     }
 

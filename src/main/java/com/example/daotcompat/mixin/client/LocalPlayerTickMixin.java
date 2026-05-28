@@ -1,6 +1,6 @@
 package com.example.daotcompat.mixin.client;
 
-import com.example.daotcompat.aot.AOTHookProvider;
+import com.example.daotcompat.aot.AOTReflect;
 import com.example.daotcompat.hook.HookTransformResolver;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.level.Level;
@@ -25,16 +25,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  *       before AOT's post-tick hook consumption &mdash; the order is correct.</li>
  * </ul>
  *
- * <p>The hook objects are fetched through {@link AOTHookProvider} (try/catch wrapper) so
- * a missing or broken AOT install can't crash the player tick loop.
+ * <p>The hook objects are fetched through {@link AOTReflect} (multi-classloader reflection
+ * lookup) so AOT loaded by Sinytra Connector into a separate classloader is still
+ * reachable from our NeoForge mod.
  */
 @Mixin(LocalPlayer.class)
 public abstract class LocalPlayerTickMixin {
 
     @Inject(method = "tick()V", at = @At("HEAD"))
     private void daotcompat$reprojectHooksHead(CallbackInfo ci) {
-        Object leftHook = AOTHookProvider.getLeftHook();
-        Object rightHook = AOTHookProvider.getRightHook();
+        Object leftHook = AOTReflect.getLeftHook();
+        Object rightHook = AOTReflect.getRightHook();
         if (leftHook == null && rightHook == null) return; // AOT absent or no hooks tracked yet
 
         LocalPlayer self = (LocalPlayer) (Object) this;
