@@ -4,7 +4,10 @@
   "package": "com.example.daotcompat.mixin",
   "compatibilityLevel": "JAVA_21",
   "refmap": "daotcompat.refmap.json",
-  "mixins": [],
+  "mixins": [
+    "HookPointMixin",
+    "accessor.HookPointAccessor"
+  ],
   "client": [],
   "server": [],
   "injectors": {
