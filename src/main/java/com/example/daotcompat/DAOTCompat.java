@@ -1,6 +1,7 @@
 package com.example.daotcompat;
 
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,7 +21,7 @@ public final class DAOTCompat {
     public static final String MOD_ID = "daotcompat";
     public static final Logger LOGGER = LoggerFactory.getLogger(MOD_ID);
 
-    public DAOTCompat(IEventBus modBus) {
-        LOGGER.info("[{}] init", MOD_ID);
+    public DAOTCompat(IEventBus modBus, ModContainer modContainer) {
+        LOGGER.info("[{}] init (container={})", MOD_ID, modContainer.getModId());
     }
 }

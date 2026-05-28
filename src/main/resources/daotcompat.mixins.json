@@ -9,7 +9,7 @@
     "accessor.HookPointAccessor"
   ],
   "client": [
-    "client.ODMTickHandlerMixin"
+    "client.LocalPlayerTickMixin"
   ],
   "server": [],
   "injectors": {

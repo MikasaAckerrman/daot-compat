@@ -67,10 +67,18 @@ public final class HookTransformResolver {
             // First tick after attach: probe sub-level and capture local-space anchor.
             SubLevel sl = SubLevelResolver.findContaining(level, worldPos);
             if (sl == null) return; // vanilla world hook — nothing to do
-            Pose3dc pose = sl.logicalPose();
-            Vec3 localPos = pose.transformPositionInverse(worldPos);
+            java.util.UUID slId = sl.getUniqueId();
+            if (slId == null) return; // sub-level not fully initialised yet, retry next tick
+            Vec3 localPos;
+            try {
+                Pose3dc pose = sl.logicalPose();
+                localPos = pose.transformPositionInverse(worldPos);
+            } catch (Throwable t) {
+                DAOTCompat.LOGGER.debug("[daotcompat] inverse transform failed at attach", t);
+                return;
+            }
             if (isInvalid(localPos)) return;
-            storage.daotCompat$setDynamicData(new DynamicHookData(sl.getUniqueId(), localPos));
+            storage.daotCompat$setDynamicData(new DynamicHookData(slId, localPos));
             return;
         }
 
