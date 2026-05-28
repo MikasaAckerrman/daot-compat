@@ -1,0 +1,61 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="MIT"
+issueTrackerURL="https://github.com/MikasaAckerrman/daot-compat/issues"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="${mod_authors}"
+description='''${mod_description}'''
+
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+# Hard dep: Sable + AOT (compat is meaningless without both)
+[[dependencies.${mod_id}]]
+modId="neoforge"
+type="required"
+versionRange="${neo_version_range}"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_version_range}"
+ordering="NONE"
+side="BOTH"
+
+# Sable: required (provides SubLevel API)
+# NOTE: version range starts at 1.0.0 — we only depend on the public SubLevelHelper / Pose3dc API
+# which has been stable across 1.x. Tested against 1.2.2.
+[[dependencies.${mod_id}]]
+modId="sable"
+type="required"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
+
+# Danny's AOT: optional dependency.
+# WHY OPTIONAL: AOT 2.2.0's bundled fabric.mod.json incorrectly reports version="1.0.0"
+# (author bug — Modrinth says 2.2.0, the jar metadata says 1.0.0). Sinytra Connector reads
+# version from fabric.mod.json. Forcing a tight range crashes startup with "not installed".
+# A loose range covers all known versions; making it optional lets the mod load no-op when
+# AOT is absent or unreadable — our mixins fail-soft via require=0 in mixins.json.
+[[dependencies.${mod_id}]]
+modId="dannys-aot"
+type="optional"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
+
+# Create Aeronautics: optional. Real modId is "aeronautics_bundled" (verified via its own
+# neoforge.mods.toml). Aeronautics already requires Sable, so listing this is mostly hint.
+[[dependencies.${mod_id}]]
+modId="aeronautics_bundled"
+type="optional"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
