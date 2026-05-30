@@ -71,7 +71,12 @@ public final class HookTransformResolver {
             // First tick after attach: probe sub-level and capture local-space anchor.
             SubLevel sl = SubLevelResolver.findContaining(level, worldPos);
             if (sl == null) {
-                transition(side, LastState.NO_SUBLEVEL);
+                if (transition(side, LastState.NO_SUBLEVEL)) {
+                    // Log WHERE the hook landed + player position, so we can tell whether
+                    // the player aimed at the airship (and our probe missed it) or at
+                    // ordinary terrain. Also reveals if hook/player are in mismatched frames.
+                    logHookVsPlayer(side, worldPos, "NO_SUBLEVEL");
+                }
                 return; // vanilla world hook — nothing to do
             }
 
@@ -182,12 +187,27 @@ public final class HookTransformResolver {
         }
     }
 
-    private static void transition(String side, LastState next) {
+    private static boolean transition(String side, LastState next) {
         LastState prev = "L".equals(side) ? lastLeft : lastRight;
-        if (prev == next) return;
+        if (prev == next) return false;
         if ("L".equals(side)) lastLeft = next; else lastRight = next;
         // Log every meaningful state transition once
         DAOTCompat.LOGGER.info("[daotcompat] {}: state {} -> {}", side, prev, next);
+        return true;
+    }
+
+    /** Logs the hook world position, the player position, and the vector between them. */
+    private static void logHookVsPlayer(String side, Vec3 worldPos, String tag) {
+        try {
+            net.minecraft.client.player.LocalPlayer p =
+                    net.minecraft.client.Minecraft.getInstance().player;
+            Vec3 pp = (p == null) ? null : p.position();
+            DAOTCompat.LOGGER.info(
+                    "[daotcompat] {}: {} hook={} player={} hook→player Δ={} dist={}",
+                    side, tag, fmt(worldPos), fmt(pp),
+                    pp == null ? "null" : fmt(worldPos.subtract(pp)),
+                    pp == null ? "?" : String.format(java.util.Locale.ROOT, "%.2f", worldPos.distanceTo(pp)));
+        } catch (Throwable ignored) { /* no player */ }
     }
 
     private static String fmt(Vec3 v) {
