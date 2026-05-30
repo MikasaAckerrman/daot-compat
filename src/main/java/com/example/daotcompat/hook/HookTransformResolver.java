@@ -71,13 +71,19 @@ public final class HookTransformResolver {
             // First tick after attach: probe sub-level and capture local-space anchor.
             SubLevel sl = SubLevelResolver.findContaining(level, worldPos);
             if (sl == null) {
+                // RECOVERY: Sable's clip mixin sometimes returns the hit in a sub-level's
+                // PLOT/local frame (~20,000,000 blocks away) instead of the visual frame.
+                // AOT then stores that as hook.position and yanks the player toward the
+                // plot origin (the "random direction" bug). Detect by absurd distance from
+                // the player and recover by finding the owning sub-level: its pose maps the
+                // plot coords back to a visual point near the player.
+                if (tryRecoverPlotCoords(level, hookPoint, worldPos, side)) {
+                    return;
+                }
                 if (transition(side, LastState.NO_SUBLEVEL)) {
-                    // Log WHERE the hook landed + player position, so we can tell whether
-                    // the player aimed at the airship (and our probe missed it) or at
-                    // ordinary terrain. Also reveals if hook/player are in mismatched frames.
                     logHookVsPlayer(side, worldPos, "NO_SUBLEVEL");
                 }
-                return; // vanilla world hook — nothing to do
+                return; // genuine vanilla world hook — nothing to do
             }
 
             UUID slId = sl.getUniqueId();
@@ -226,6 +232,59 @@ public final class HookTransformResolver {
         DAOTCompat.LOGGER.debug("[daotcompat] releasing hook: {}", reason);
         AOTReflect.release(hookPoint);
         DynamicHookMap.put(hookPoint, null);
+    }
+
+    /**
+     * Distance² beyond which a hook is considered to be in a sub-level's plot/local frame
+     * (a frame-mismatch bug) rather than a real world hit. Real hooks are at most a few
+     * dozen blocks away; plot coords are ~20,000,000 blocks away. 1000² = 1e6.
+     */
+    private static final double FAR_FROM_PLAYER_SQR = 1_000_000.0D;
+
+    /** Distance² within which a recovered visual point is accepted as the real hook. 256². */
+    private static final double NEAR_PLAYER_SQR = 65_536.0D;
+
+    /**
+     * Recovery for the case where AOT stored the hook in a sub-level's PLOT/local frame
+     * (Sable's clip mixin returned the raw block location, ~20M blocks away). We treat the
+     * stored position as local coords and find the sub-level whose pose maps it back to a
+     * visual point near the player, then correct {@code hook.position} and start tracking.
+     *
+     * @return {@code true} if recovery succeeded (caller should return).
+     */
+    private static boolean tryRecoverPlotCoords(Level level, Object hookPoint, Vec3 hookPos, String side) {
+        net.minecraft.client.player.LocalPlayer p =
+                net.minecraft.client.Minecraft.getInstance().player;
+        if (p == null) return false;
+        Vec3 pp = p.position();
+        // Only attempt when the hook is absurdly far — otherwise it's a genuine vanilla hit.
+        if (hookPos.distanceToSqr(pp) < FAR_FROM_PLAYER_SQR) return false;
+
+        for (SubLevel cand : SableBridge.getAllSubLevels(level)) {
+            if (cand == null || cand.isRemoved()) continue;
+            UUID id = cand.getUniqueId();
+            if (id == null) continue;
+            Vec3 visual;
+            try {
+                // Treat the plot-frame hook position as THIS sub-level's local coords.
+                visual = cand.logicalPose().transformPosition(hookPos);
+            } catch (Throwable t) {
+                continue;
+            }
+            if (isInvalid(visual)) continue;
+            if (visual.distanceToSqr(pp) <= NEAR_PLAYER_SQR) {
+                // Owning sub-level found. Correct AOT's hook to the visual location and
+                // begin tracking — the plot coords ARE our stored local anchor.
+                AOTReflect.setPosition(hookPoint, visual);
+                DynamicHookMap.put(hookPoint, new DynamicHookData(id, hookPos));
+                DAOTCompat.LOGGER.info(
+                        "[daotcompat] {}: RECOVERED plot-frame hook -> sublevel={} visual={} (was plot={}, player={})",
+                        side, id, fmt(visual), fmt(hookPos), fmt(pp));
+                transition(side, LastState.TRACKING);
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean isInvalid(@Nullable Vec3 v) {
