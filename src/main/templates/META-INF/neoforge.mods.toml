@@ -1,13 +1,14 @@
 modLoader="javafml"
 loaderVersion="${loader_version_range}"
-license="MIT"
+license="All Rights Reserved"
 issueTrackerURL="https://github.com/MikasaAckerrman/daot-compat/issues"
 
 [[mods]]
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-authors="${mod_authors}"
+authors="armorberserk"
+credits="Created and maintained by armorberserk."
 description='''${mod_description}'''
 
 [[mixins]]
@@ -28,9 +29,7 @@ versionRange="${minecraft_version_range}"
 ordering="NONE"
 side="BOTH"
 
-# Sable: required (provides SubLevel API)
-# NOTE: version range starts at 1.0.0 — we only depend on the public SubLevelHelper / Pose3dc API
-# which has been stable across 1.x. Tested against 1.2.2.
+# Sable provides the sub-level API this mod is built on.
 [[dependencies.${mod_id}]]
 modId="sable"
 type="required"
@@ -38,12 +37,8 @@ versionRange="[1.0.0,)"
 ordering="AFTER"
 side="BOTH"
 
-# Danny's AOT: optional dependency.
-# WHY OPTIONAL: AOT 2.2.0's bundled fabric.mod.json incorrectly reports version="1.0.0"
-# (author bug — Modrinth says 2.2.0, the jar metadata says 1.0.0). Sinytra Connector reads
-# version from fabric.mod.json. Forcing a tight range crashes startup with "not installed".
-# A loose range covers all known versions; making it optional lets the mod load no-op when
-# AOT is absent or unreadable — our mixins fail-soft via require=0 in mixins.json.
+# Danny's AOT. Optional + loose range on purpose: its bundled metadata reports version
+# 1.0.0, and the compat simply stays idle when AOT is missing.
 [[dependencies.${mod_id}]]
 modId="dannys-aot"
 type="optional"
@@ -51,8 +46,7 @@ versionRange="[1.0.0,)"
 ordering="AFTER"
 side="BOTH"
 
-# Create Aeronautics: optional. Real modId is "aeronautics_bundled" (verified via its own
-# neoforge.mods.toml). Aeronautics already requires Sable, so listing this is mostly hint.
+# Create: Aeronautics ships its sub-levels through Sable, so this is just a load-order hint.
 [[dependencies.${mod_id}]]
 modId="aeronautics_bundled"
 type="optional"

@@ -1,7 +1,7 @@
 {
   "required": false,
   "minVersion": "0.8.5",
-  "package": "com.example.daotcompat.mixin",
+  "package": "com.armorberserk.daotcompat.mixin",
   "compatibilityLevel": "JAVA_21",
   "refmap": "daotcompat.refmap.json",
   "mixins": [],
