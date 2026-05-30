@@ -1,14 +1,15 @@
 modLoader="javafml"
 loaderVersion="${loader_version_range}"
 license="All Rights Reserved"
-issueTrackerURL="https://github.com/MikasaAckerrman/daot-compat/issues"
+issueTrackerURL="${mod_issue_url}"
+displayURL="${mod_display_url}"
 
 [[mods]]
 modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
-authors="armorberserk"
-credits="Created and maintained by armorberserk."
+authors="${mod_authors}"
+credits="${mod_credits}"
 description='''${mod_description}'''
 
 [[mixins]]
