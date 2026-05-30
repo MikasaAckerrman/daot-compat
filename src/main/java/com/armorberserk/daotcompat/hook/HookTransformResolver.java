@@ -26,12 +26,11 @@ public final class HookTransformResolver {
     // A real grab is within gear range. A reported point millions of blocks out means Sable
     // handed back a sub-level's internal plot coordinate, which we remap onto the airship.
     private static final double PLOT_FRAME_SQR = 1_000_000.0D;
-    // How close a remapped point must land to the player to accept it as the right sub-level.
+    // How close a hook must stay to the player. Beyond this we let go instead of dragging
+    // the player off into nowhere, and the same radius accepts a remapped attach point.
     private static final double MATCH_RADIUS_SQR = 65_536.0D;
     // Below this the pose effectively did not change; skip the write to avoid feeding jitter.
     private static final double IDLE_SQR = 1.0E-6D;
-    // No legitimate single-tick motion is this large; ignore it instead of flinging the player.
-    private static final double MAX_STEP_SQR = 1024.0D;
 
     private HookTransformResolver() {}
 
@@ -120,8 +119,13 @@ public final class HookTransformResolver {
             drop(hook);
             return;
         }
-        double moved = world.distanceToSqr(next);
-        if (moved < IDLE_SQR || moved >= MAX_STEP_SQR) return;
+        if (world.distanceToSqr(next) < IDLE_SQR) return; // ship effectively idle
+
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player != null && next.distanceToSqr(player.position()) > MATCH_RADIUS_SQR) {
+            drop(hook); // sub-level moved out of reach; let go instead of dragging the player
+            return;
+        }
         AOTReflect.setPosition(hook, next);
     }
 
