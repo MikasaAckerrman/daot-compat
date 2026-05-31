@@ -19,7 +19,8 @@ import org.slf4j.LoggerFactory;
  * the rope no longer drifts or flings the player (see the LocalPlayer mixin).
  *
  * <p>Server side: a thunder spear lodged in a sub-level is re-placed from the sub-level's
- * pose each tick so its fuse explosion lands where it stuck (see {@link ThunderSpearFollower}).
+ * pose just before it ticks, so its fuse explosion lands where it stuck even while the
+ * airship is moving (see {@link ThunderSpearFollower}).
  */
 @Mod(DAOTCompat.MOD_ID)
 public final class DAOTCompat {
@@ -28,7 +29,9 @@ public final class DAOTCompat {
     public static final Logger LOGGER = LoggerFactory.getLogger("DAOT Compat");
 
     public DAOTCompat(IEventBus modBus) {
-        NeoForge.EVENT_BUS.addListener((EntityTickEvent.Post event) ->
+        // Pre (before the entity ticks) so the spear is glued before its own tick reads the
+        // position to explode - otherwise the blast lags one tick behind a moving airship.
+        NeoForge.EVENT_BUS.addListener((EntityTickEvent.Pre event) ->
                 ThunderSpearFollower.onTick(event.getEntity()));
         LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded");
     }

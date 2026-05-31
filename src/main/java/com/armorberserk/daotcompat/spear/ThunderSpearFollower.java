@@ -44,22 +44,22 @@ public final class ThunderSpearFollower {
             return;
         }
 
-        Vec3 pos = entity.position();
         DynamicHookData anchor = ANCHORS.get(entity);
         if (anchor == null) {
-            SubLevel sl = SubLevelResolver.findContaining(level, pos);
+            SubLevel sl = SubLevelResolver.findContaining(level, entity.position());
             if (sl == null) return; // stuck in ordinary terrain or a titan - AOT handles those
             UUID id = sl.getUniqueId();
             if (id == null) return;
             Vec3 local;
             try {
-                local = sl.logicalPose().transformPositionInverse(pos);
+                local = sl.logicalPose().transformPositionInverse(entity.position());
             } catch (Throwable t) {
                 return;
             }
             if (notFinite(local)) return;
-            ANCHORS.put(entity, new DynamicHookData(id, local));
-            return;
+            anchor = new DynamicHookData(id, local);
+            ANCHORS.put(entity, anchor);
+            // fall through: glue this tick too (a no-op on the capture tick, correct afterwards)
         }
 
         SubLevel sl = SableBridge.getSubLevel(level, anchor.subLevelId());
