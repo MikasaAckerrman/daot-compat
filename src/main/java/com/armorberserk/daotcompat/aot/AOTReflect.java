@@ -5,7 +5,6 @@
 package com.armorberserk.daotcompat.aot;
 
 import com.armorberserk.daotcompat.DAOTCompat;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
@@ -43,8 +42,8 @@ public final class AOTReflect {
         if (resolved) return;
         resolved = true;
 
-        Class<?> hookPoint = find("daot.HookPoint");
-        Class<?> tickHandler = find("daot.ODMTickHandler");
+        Class<?> hookPoint = Reflect.find("daot.HookPoint");
+        Class<?> tickHandler = Reflect.find("daot.ODMTickHandler");
         if (hookPoint == null || tickHandler == null) {
             DAOTCompat.LOGGER.info("Danny's AOT not present - compatibility layer idle.");
             return;
@@ -60,25 +59,6 @@ public final class AOTReflect {
         } catch (Throwable t) {
             DAOTCompat.LOGGER.warn("Danny's AOT hook API has changed, disabling compat: {}", t.toString());
         }
-    }
-
-    @Nullable
-    private static Class<?> find(String name) {
-        ClassLoader[] loaders = {
-                Thread.currentThread().getContextClassLoader(),
-                LocalPlayer.class.getClassLoader(),
-                AOTReflect.class.getClassLoader(),
-                ClassLoader.getSystemClassLoader()
-        };
-        for (ClassLoader cl : loaders) {
-            if (cl == null) continue;
-            try {
-                return Class.forName(name, false, cl);
-            } catch (Throwable ignored) {
-                // try the next loader
-            }
-        }
-        return null;
     }
 
     @Nullable
