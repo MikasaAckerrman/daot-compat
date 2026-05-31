@@ -45,6 +45,11 @@ public final class RemoteHookFollower {
         if (level == null || !RemoteHookReflect.isAvailable()) return;
         for (Object data : RemoteHookReflect.hooks()) {
             if (data == null) continue;
+            // Common case: a player who is not grappling does no work and holds no state.
+            if (!RemoteHookReflect.isActive(data, true) && !RemoteHookReflect.isActive(data, false)) {
+                STATE.remove(data);
+                continue;
+            }
             Anchor anchor = STATE.computeIfAbsent(data, k -> new Anchor());
             follow(level, data, anchor, true);
             follow(level, data, anchor, false);
