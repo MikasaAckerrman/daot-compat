@@ -15,28 +15,30 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Runs at the start of the player tick, before Danny's AOT reads hook positions to move
- * players and draw ropes. Targeting the vanilla {@link LocalPlayer} keeps the mixin on a
- * Mojang-mapped class, which applies cleanly even with AOT loaded via Connector.
- *
- * <p>We refresh both our own hooks and every other player's hooks so all ropes stay glued
- * to the airship they grabbed.
+ * Runs at the start and end of the player tick. The HEAD pass ensures the hooks are
+ * corrected before AOT's movement logic reads them; the TAIL pass catches fresh hooks
+ * that AOT set during the tick (so the very first rendered frame already points at the
+ * airship instead of flashing to a random spot for one frame).
  */
 @Mixin(LocalPlayer.class)
 public abstract class LocalPlayerTickMixin {
 
     @Inject(method = "tick()V", at = @At("HEAD"))
-    private void daotcompat$updateHooks(CallbackInfo ci) {
+    private void daotcompat$updateHooksHead(CallbackInfo ci) {
+        updateAll();
+    }
+
+    @Inject(method = "tick()V", at = @At("TAIL"))
+    private void daotcompat$updateHooksTail(CallbackInfo ci) {
+        updateAll();
+    }
+
+    private void updateAll() {
         Level level = ((LocalPlayer) (Object) this).level();
-
-        // Other players' ropes - runs every tick, even when we are not grappling.
         RemoteHookFollower.tick(level);
-
-        // Our own hooks.
         Object left = AOTReflect.getLeftHook();
         Object right = AOTReflect.getRightHook();
-        if (left == null && right == null) return;
-        HookTransformResolver.process(level, left);
-        HookTransformResolver.process(level, right);
+        if (left != null) HookTransformResolver.process(level, left);
+        if (right != null) HookTransformResolver.process(level, right);
     }
 }
