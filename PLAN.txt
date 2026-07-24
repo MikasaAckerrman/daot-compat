@@ -148,3 +148,54 @@ DAOT COMPAT — ПЕРЕДАЧА ЗАДАЧИ СЛЕДУЮЩЕЙ НЕЙРОСЕ�
 НЕ включены в архив (слишком большие, ~125МБ суммарно). Их нужно скачать
 заново с GitHub-репозитория (ветка feature/4-reflection-fix, папка libs/)
 или взять с диска пользователя, прежде чем собирать проект.
+
+=====================================================
+ROUND 3 — ЧТО СДЕЛАНО В ЭТОЙ СЕССИИ (ветка round3-stage1-fixes)
+=====================================================
+Ветка: https://github.com/MikasaAckerrman/daot-compat/tree/round3-stage1-fixes
+Коммиты: 1848b7a (baseline round3 = round1+round2 фиксы, gradle wrapper сгенерирован,
+libs/ добавлены точь-в-точь как в build.gradle) -> eeb192c (Stage 1 багфиксы) -> 5e61710 (.gitignore).
+
+Окружение сборки: JDK 21 = /usr/lib/jvm/java-21-openjdk-amd64, gradle wrapper уже сгенерирован
+(gradlew/gradle/), libs/ уже содержит все 5 jar (скачаны с Modrinth API + maven.ryanhcode.dev,
+см. точные версии в build.gradle). Сборка проверена: BUILD SUCCESSFUL.
+`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew build -x test`
+
+STAGE 1 (СДЕЛАНО, см. CHANGES.md "Stage 1 fixes"):
+1. Копья на физ-объектах не рендерились: причина - ThunderSpearFollower.onTick() двигал
+   entity.setPos(...) но не трогал xo/yo/zo (интерполяция рендера), из-за чего клиент
+   интерполировал дикие прыжки каждый кадр. Фикс: SableBridge.setOldPosNoMovement(entity) ->
+   dev.ryanhcode.sable.api.entity.EntitySubLevelUtil.setOldPosNoMovement (родное API Sable).
+   ЕСТЬ TODO на будущее: полная интеграция через Sable's sable$setTrackingSubLevel
+   (dev.ryanhcode.sable.sublevel.entity_collision.SubLevelEntityCollision#collide,
+   EntityMovementExtension) - не сделано, текущий фикс достаточен но не "нативный".
+2. Провал сквозь физ-объект на скорости: расследовано - коллизия саб-левела для игрока
+   (ServerPlayer) идёт другим путём чем ванильная (не полный свип), при большом смещении
+   за тик можно проскочить. Полноценный фикс требует миксин в код Sable (сознательно
+   избегается в этом проекте - см. README/PLAN, only compileOnly deps, no mixins into
+   3rd-party classes historically... ПРОВЕРЬ актуальность этого решения в CHANGES.md).
+   Реализован defensive mitigation: HighSpeedSubLevelGuard в ClientTickEvent.Post -
+   при смещении >1.0 бл/тик рядом с саб-левелом делает под-шаги по 0.9 блока и
+   клампит игрока при обнаружении вложения в твёрдую геометрию корабля. НЕ гарантированный
+   root-cause фикс, честно помечено как mitigation.
+
+СЛЕДУЮЩИЕ ЭТАПЫ (не начаты, из инструкции пользователя - см. инструкция в чате, кратко):
+- Этап 2: 3 режима тросов на рукоятках ODM (притягивание/фиксация/нет натяжения),
+  раздельные бинды на левую/правую рукоятку, поведение при смене хотбара/снятии ODM gear.
+- Этап 3: визуальная физика троса через Sable RopePhysicsObject (провисание, огибание
+  блоков), макс. длина троса (взять из аниме-лора, ~исследовать), эластичность.
+  РЕФЕРЕНС уже подготовлен: ~/workspace/grapple_ref/decompiled/ - декомпилированные классы
+  мода grapplinghook (yyon), особенно physics/rope/{AnchorSpace,RopeBend,RopeBendInsertion,
+  RopeSegmentHandler} и raycast/{WrapEdgeFinder,MultiSpaceRaycaster} - готовый пример как
+  верёвка огибает блоки и работает с под-уровнями (AnchorSpace.Contraption/SubLevel - тот
+  же принцип что и Sable). Sable's RopePhysicsObject API уже упомянут выше в этом файле
+  (dev.ryanhcode.sable.api.physics.object.rope.RopePhysicsObject/RopeHandle/PhysicsPipeline).
+- Ограничение AOT: движение ODM (pull force, orbit, dual-hook) целиком внутри AOT jar,
+  исходников нет - см. секцию выше "БОЛЬШОЙ СЛЕДУЮЩИЙ ЭТАП" (архитектурное решение
+  visual-only vs full override должно быть согласовано с пользователем).
+
+Разница jar daotcompat-0.1.0 vs daotcompat-1.0.0 (пользователь спрашивал): 0.1.0 - древний
+прототип, пакет com.example.daotcompat, только базовое позиционирование хука через mixin,
+без кнопки подтягивания/копий/keybind/lang. 1.0.0 - текущая версия (round1+2), пакет
+com.armorberserk.daotcompat, есть ReelControl (LEFT_ALT), ThunderSpearFollower+TrackedAnchor
+(TTL), dimension guard, keybinds, локализация ru/en.
