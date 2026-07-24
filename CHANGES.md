@@ -83,3 +83,89 @@ Build verified: `BUILD SUCCESSFUL` with JDK 21 + Gradle 8.11.1 against real `lib
 ### Verification
 
 `JAVA_HOME=/home/user/workspace/jdk21 ./gradle-8.11.1/bin/gradle --no-daemon clean build -x test` → `BUILD SUCCESSFUL`.
+
+## Stage 1 fixes (spear render, high-speed clipping)
+
+### Bug 1 — thunder spears lodged on a sub-level don't render
+
+**What was wrong (root cause).** `spear/ThunderSpearFollower.java` re-places a lodged spear each
+server tick with `entity.setPos(next)` (`ThunderSpearFollower.java:142`) to keep it glued to the
+moving airship. That fixes *where the spear is* but not *how the client draws it*:
+`ThunderSpearEntityRenderer.render()` samples `entity.getPosition(partialTick)`
+(`method_30950`, see `~/workspace/aot_ref/decompiled/daot/ThunderSpearEntityRenderer.java:90`),
+which linearly interpolates between the previous-tick position `(xo,yo,zo)` and the current
+`(x,y,z)` every frame. `setPos` updates only `(x,y,z)`; `(xo,yo,zo)` is left at the stale
+pre-ship-move world point, so the interpolated draw position swings a full tick of ship
+translation+rotation every frame — off the ship, into blocks, or outside the rendered area — which
+reads as "the spear doesn't render" / flickers away, worst as the ship gains rotation.
+
+**What changed.**
+- `sable/SableBridge.java`: new `setOldPosNoMovement(Entity)` that delegates to Sable's own
+  first-party helper `dev.ryanhcode.sable.api.entity.EntitySubLevelUtil.setOldPosNoMovement`
+  (verified `public static` in `libs/sable-neoforge-1.21.1-1.2.2.jar`, package
+  `dev.ryanhcode.sable.api.entity`), wrapped in the usual `try/catch(Throwable)` so it degrades to a
+  no-op if Sable is absent — matching every other method in this class.
+- `spear/ThunderSpearFollower.java`: call `SableBridge.setOldPosNoMovement(entity)` immediately
+  after the `setPos` reposition. That recomputes `(xo,yo,zo)` from the sub-level's *previous-tick*
+  pose (`trackingSubLevel.lastPose()`), so the next interpolated frame follows the ship smoothly.
+  Read of the decompiled helper (`~/workspace/sable_ref/decompiled/.../EntitySubLevelUtil.java:39-58`)
+  confirms its `else` branch (entity not Sable-"tracked") simply pins old-pos to the current pos,
+  which still removes the swing — so the call is safe unconditionally, no tracking registration
+  required. Class javadoc updated ("Fix 3"); a `TODO` records the fuller integration path
+  (registering the spear into Sable's `sable$trackingSubLevel` system via the
+  `EntityMovementExtension` mixin interface) for a later session.
+
+### Bug 2 — player falls/clips through a physics sub-level object at high speed
+
+**What was verified (honest account).** Sable injects sub-level block collision by `@Redirect`ing
+vanilla `Entity.collide(Vec3)` inside `move()`
+(`dev.ryanhcode.sable.mixin.entity.entity_sublevel_collision.EntityMixin#sable$collideRedirect`)
+to `dev.ryanhcode.sable.sublevel.entity_collision.SubLevelEntityCollision#collide` (decompiled from
+`libs/sable-neoforge-1.21.1-1.2.2.jar`). That method is **discretely sub-stepped, not continuously
+swept** like vanilla `Level.getCollisions(entity, box.expandTowards(delta))`:
+- non-player entities: `substeps = Math.min(10, Math.max(1, (int)(motion.length()/0.015625)))`
+  — hard-capped at 10 (`SubLevelEntityCollision.java:145`);
+- **local player: a fixed `substeps = 8`, independent of speed** (`SubLevelEntityCollision.java:146-148`).
+
+Each sub-step is a static SAT overlap of the player OBB vs. the ship's block OBBs. At normal speeds
+8 samples overlap the ~1.8-tall player box with room to spare, so nothing is missed; at the high
+per-tick displacement AOT ODM gear produces, the fixed sample spacing (`motion.length()/8`) grows
+past `player-box + deck-thickness` and consecutive samples straddle a thin deck with none inside it
+— discrete-sampling tunnelling. This bites sub-levels and not static terrain precisely because
+static terrain uses the continuous swept query. Additionally, `SubLevelEntityCollision.collide`
+does **no** block collision for a `ServerPlayer` at all — it returns motion unchanged and only
+honours an already-set tracking sub-level (`SubLevelEntityCollision.java:96-110`) — so player-vs-
+sub-level collision is entirely client-side. I also checked `hook/ReelControl.java` (the spec's
+alternative hypothesis): it already clamps corrected velocity to `MAX_TANGENTIAL_SPEED = 3.0`
+blocks/tick and only acts while `HANG` is held, so it is not the source of a huge single-tick
+displacement; AOT's own untouched pull is where high speeds come from.
+
+**What changed — a conservative, clearly-labelled mitigation (not a Sable-internal root-cause fix).**
+We cannot raise Sable's sub-step count from our own mod without mixing into Sable's classes, which
+this project deliberately avoids (see `DAOTCompat` "Fix 1"). Instead:
+- New `collision/HighSpeedSubLevelGuard.java`, invoked last in the existing `ClientTickEvent.Post`
+  LOWEST listener in `DAOTCompat.java`. Once per tick, **only** when the local player's per-tick
+  displacement exceeds `FAST_THRESHOLD` (1.0 block/tick) **and** `SableBridge.getIntersecting`
+  reports a sub-level near the movement segment (a no-op away from ships / at slow speed), it
+  re-walks the straight segment from the pre-tick position (`xo,yo,zo`) to the post-tick position
+  in `<= 0.9`-block sub-steps and tests whether the player box is embedded in solid sub-level
+  geometry at any intermediate step (transforming a lattice of sample points into each sub-level's
+  local frame and testing strict containment against the block collision shape — sub-level blocks
+  live in the same `Level` at their local coords, exactly as Sable reads them in
+  `EntityMixin#getInBlockState`). If an embedded intermediate step is found (the resolved path
+  passed through ship geometry Sable's coarser sampling skipped), the player is clamped back to the
+  last embedding-free sub-step and the velocity component along the motion is zeroed, mirroring
+  vanilla swept collision.
+- `sable/SableBridge.java`: new `getIntersecting(Level, AABB)` (wraps
+  `SubLevelContainer.queryIntersecting`) as the cheap near-a-ship gate.
+
+**Safe by construction:** the guard fires only when a genuine intermediate sample is inside solid
+geometry, so it can't fight resolution that already worked (standing on a deck leaves every sample
+on/above the surface via the strict-containment `INSET`, never embedded) and does nothing in
+ordinary terrain. It is a best-effort safety net: the sample lattice reliably catches roughly
+deck-thickness geometry but is not a pixel-exact swept solid, so it is documented as a mitigation
+rather than a guaranteed fix for every possible shape.
+
+### Verification (Stage 1)
+
+`JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 ./gradlew clean build -x test` → `BUILD SUCCESSFUL`.

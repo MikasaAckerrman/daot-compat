@@ -34,6 +34,24 @@ import java.util.WeakHashMap;
  * AOT's fuse countdown and its {@code explode()} call happen inside that {@code entity.tick()},
  * so our position correction is always applied before the explosion position is sampled —
  * even in the very tick the spear detonates.
+ *
+ * <h3>Fix 3 (stage 1): render interpolation must be corrected too, not just the position</h3>
+ * <p>Repositioning with {@code entity.setPos(next)} fixes where the spear <em>is</em>, but not how
+ * the client draws it. {@code ThunderSpearEntityRenderer.render()} samples
+ * {@code entity.getPosition(partialTick)} ({@code method_30950}), which linearly interpolates
+ * between the previous-tick position {@code (xo,yo,zo)} and the current {@code (x,y,z)} every frame.
+ * Our correction teleports the spear by a full tick of ship translation <em>and rotation</em> each
+ * tick while leaving {@code (xo,yo,zo)} pointing at the stale pre-move world point, so the
+ * interpolated draw position swings wildly — often into solid blocks or far outside the loaded
+ * area — which reads to the player as "the spear doesn't render" / flickers away, worst as the ship
+ * gathers rotation.
+ *
+ * <p>Sable ships a first-party fix for exactly this: after each reposition we call
+ * {@code EntitySubLevelUtil.setOldPosNoMovement(entity)} (via {@link SableBridge}), which recomputes
+ * {@code (xo,yo,zo)} from the sub-level's <em>previous-tick</em> pose composed with the entity's
+ * local offset, so the next interpolated frame follows the ship smoothly instead of jumping. Its
+ * {@code else} branch (entity not Sable-tracked) simply pins old-pos to the current pos, which still
+ * removes the swing, so the call is safe to make unconditionally.
  */
 public final class ThunderSpearFollower {
 
@@ -140,6 +158,24 @@ public final class ThunderSpearFollower {
         }
         if (pos.distanceToSqr(next) < IDLE_SQR) return; // nothing moved - leave the spear be
         entity.setPos(next.x, next.y, next.z);
+
+        // Render-interpolation fix (see class javadoc "Fix 3"). setPos only moved the *current*
+        // position; the renderer interpolates between (xo,yo,zo) and (x,y,z) every frame, and our
+        // teleport left (xo,yo,zo) at the stale pre-ship-move world point. Recompute the old-pos
+        // from the sub-level's previous-tick pose via Sable's own helper so the frame in between is
+        // smooth (or, if the spear isn't a Sable-tracked entity, pinned to the current pos, which
+        // still removes the wild swing). Routed through SableBridge so it can never throw.
+        //
+        // TODO(stage-later): a more complete integration would register the spear into Sable's own
+        // sub-level "tracking" system (the @Unique sable$trackingSubLevel field set inside
+        // dev.ryanhcode.sable.sublevel.entity_collision.SubLevelEntityCollision#collide and exposed
+        // via the mixin interface EntityMovementExtension#sable$setTrackingSubLevel(SubLevel)). That
+        // would let Sable's own per-tick pose/render systems carry the spear natively instead of our
+        // manual reposition, and setOldPosNoMovement would then take its smooth tracked branch every
+        // tick. It needs a mixin-interface cast plus explicit register/unregister on lodge/drop, so
+        // it is deferred; the unconditional call below already fixes the reported invisibility.
+        SableBridge.setOldPosNoMovement(entity);
+
         LAST_WORLD_POS.put(entity, next); // remember for detonation drift log
     }
 
