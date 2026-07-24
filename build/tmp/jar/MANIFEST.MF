@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Specification-Title: daotcompat
+Specification-Vendor: armorberserk
+Specification-Version: 1
+Implementation-Title: DAOT Aeronautics Compat
+Implementation-Version: 1.0.0
+Implementation-Vendor: armorberserk
+MixinConfigs: daotcompat.mixins.json
+

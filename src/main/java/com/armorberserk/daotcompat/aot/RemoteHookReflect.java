@@ -1,0 +1,112 @@
+/*
+ * DAOT Aeronautics Compat
+ * Copyright (c) 2026 armorberserk. All rights reserved.
+ */
+package com.armorberserk.daotcompat.aot;
+
+import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
+
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.ConcurrentModificationException;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Reflective access to Danny's AOT client-side store of other players' hooks
+ * ({@code RemoteHookTracker} and its {@code RemoteHookData}). All the fields we touch are
+ * public. Client-only by nature; if AOT is absent every call is a harmless no-op.
+ */
+public final class RemoteHookReflect {
+
+    private static volatile boolean resolved;
+    private static volatile boolean ready;
+    private static Method getAllHooks;
+    private static Field leftActive;
+    private static Field leftPosition;
+    private static Field rightActive;
+    private static Field rightPosition;
+
+    private RemoteHookReflect() {}
+
+    private static synchronized void resolve() {
+        if (resolved) return;
+        resolved = true;
+        Class<?> tracker = Reflect.find("daot.RemoteHookTracker");
+        Class<?> data = Reflect.find("daot.RemoteHookTracker$RemoteHookData");
+        if (tracker == null || data == null) return;
+        try {
+            getAllHooks = tracker.getMethod("getAllHooks");
+            leftActive = data.getField("leftActive");
+            leftPosition = data.getField("leftPosition");
+            rightActive = data.getField("rightActive");
+            rightPosition = data.getField("rightPosition");
+            ready = true;
+        } catch (Throwable ignored) {
+            // AOT present but remote-hook API changed - stay disabled
+        }
+    }
+
+    public static boolean isAvailable() {
+        if (!resolved) resolve();
+        return ready;
+    }
+
+    /**
+     * @return a defensive snapshot of every tracked remote hook record, or empty.
+     *
+     * <p><b>Fix 6 (code review round 2):</b> {@code getAllHooks.invoke(null)} returns AOT's own
+     * live {@code Map}; its {@code .values()} is a live view, not a snapshot, so iterating it
+     * directly in {@code RemoteHookFollower.tick()} risked a {@link ConcurrentModificationException}
+     * if AOT mutated the map from another thread (e.g. a network packet handler) mid-iteration.
+     * We do not control AOT's internal locking, so this is layered: {@code synchronized(m)} is a
+     * best-effort measure that only helps if AOT happens to synchronize its own mutations on the
+     * same map instance, and the surrounding try/catch is the actual guarantee — if a mutation
+     * still slips in while we copy, we swallow the CME and hand back whatever we already collected
+     * instead of crashing the client tick.
+     */
+    public static List<?> hooks() {
+        if (!isAvailable()) return Collections.emptyList();
+        try {
+            Object result = getAllHooks.invoke(null);
+            if (!(result instanceof Map<?, ?> m)) return Collections.emptyList();
+            synchronized (m) {
+                return new ArrayList<>(m.values());
+            }
+        } catch (ConcurrentModificationException cme) {
+            return Collections.emptyList();
+        } catch (Throwable t) {
+            return Collections.emptyList();
+        }
+    }
+
+    public static boolean isActive(Object data, boolean left) {
+        if (!ready || data == null) return false;
+        try {
+            return (left ? leftActive : rightActive).getBoolean(data);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    @Nullable
+    public static Vec3 getPosition(Object data, boolean left) {
+        if (!ready || data == null) return null;
+        try {
+            return (left ? leftPosition : rightPosition).get(data) instanceof Vec3 v ? v : null;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    public static void setPosition(Object data, boolean left, Vec3 pos) {
+        if (!ready || data == null || pos == null) return;
+        try {
+            (left ? leftPosition : rightPosition).set(data, pos);
+        } catch (Throwable ignored) {
+        }
+    }
+}

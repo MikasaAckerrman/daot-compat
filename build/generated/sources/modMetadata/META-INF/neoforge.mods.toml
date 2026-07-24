@@ -1,0 +1,56 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="All Rights Reserved"
+issueTrackerURL="https://github.com/armorberserk/daot-compat/issues"
+displayURL="https://github.com/armorberserk/daot-compat"
+
+[[mods]]
+modId="daotcompat"
+version="1.0.0"
+displayName="DAOT Aeronautics Compat"
+authors="armorberserk"
+credits="Created and maintained by armorberserk."
+description='''Makes Danny's AOT grappling hooks work on Create: Aeronautics / Sable airships. Hooks that grab a moving sub-level are followed every tick instead of drifting or flinging the player. Created by armorberserk.'''
+
+[[mixins]]
+config="daotcompat.mixins.json"
+
+# Hard dep: Sable + AOT (compat is meaningless without both)
+[[dependencies.daotcompat]]
+modId="neoforge"
+type="required"
+versionRange="[21.1.0,22)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.daotcompat]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
+
+# Sable provides the sub-level API this mod is built on.
+[[dependencies.daotcompat]]
+modId="sable"
+type="required"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
+
+# Danny's AOT. Optional + loose range on purpose: its bundled metadata reports version
+# 1.0.0, and the compat simply stays idle when AOT is missing.
+[[dependencies.daotcompat]]
+modId="dannys-aot"
+type="optional"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
+
+# Create: Aeronautics ships its sub-levels through Sable, so this is just a load-order hint.
+[[dependencies.daotcompat]]
+modId="aeronautics_bundled"
+type="optional"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"

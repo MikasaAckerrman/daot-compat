@@ -1,0 +1,56 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="All Rights Reserved"
+issueTrackerURL="${mod_issue_url}"
+displayURL="${mod_display_url}"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="${mod_authors}"
+credits="${mod_credits}"
+description='''${mod_description}'''
+
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+# Hard dep: Sable + AOT (compat is meaningless without both)
+[[dependencies.${mod_id}]]
+modId="neoforge"
+type="required"
+versionRange="${neo_version_range}"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_version_range}"
+ordering="NONE"
+side="BOTH"
+
+# Sable provides the sub-level API this mod is built on.
+[[dependencies.${mod_id}]]
+modId="sable"
+type="required"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
+
+# Danny's AOT. Optional + loose range on purpose: its bundled metadata reports version
+# 1.0.0, and the compat simply stays idle when AOT is missing.
+[[dependencies.${mod_id}]]
+modId="dannys-aot"
+type="optional"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
+
+# Create: Aeronautics ships its sub-levels through Sable, so this is just a load-order hint.
+[[dependencies.${mod_id}]]
+modId="aeronautics_bundled"
+type="optional"
+versionRange="[1.0.0,)"
+ordering="AFTER"
+side="BOTH"
