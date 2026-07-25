@@ -10,6 +10,7 @@ import com.armorberserk.daotcompat.collision.HighSpeedSubLevelGuard;
 import com.armorberserk.daotcompat.hook.HookTransformResolver;
 import com.armorberserk.daotcompat.hook.ReelControl;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
+import com.armorberserk.daotcompat.input.HotbarSwapHandler;
 import com.armorberserk.daotcompat.input.KeybindEventListener;
 import com.armorberserk.daotcompat.physics.GrapplePhysicsController;
 import com.armorberserk.daotcompat.render.SparkEffectRenderer;
@@ -73,6 +74,9 @@ public final class DAOTCompat {
             
             // Register Phase 4B spark effects
             modBus.register(SparkEffectRenderer.class);
+            
+            // Register Phase 5 hotbar swapping
+            modBus.register(HotbarSwapHandler.class);
 
             NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (ClientTickEvent.Post event) -> {
                 LocalPlayer player = Minecraft.getInstance().player;
