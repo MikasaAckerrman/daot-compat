@@ -21,6 +21,22 @@ This stage completely replaces the current automatic grappling system with an **
 
 ---
 
+## ⚠️ IMPORTANT: DEW & GAS SYSTEM ADDED
+
+**New document:** `ROUND3_STAGE2_DEW_SPECIFICATION.md` contains complete anime-accurate DEW mechanics:
+
+- ✅ **DEW (Double Space)** — Gas-powered forward impulse
+- ✅ **Reverse DEW (Double S)** — Gas-powered backward impulse  
+- ✅ **Gas Management** — Resource tank with regeneration/consumption
+- ✅ **Rope Interaction** — DEW amplified by rope tension
+- ✅ **Spark Effects** — Visual feedback when high-speed sliding
+- ✅ **Balance Formulas** — Tunable constants with rationale
+- ✅ **Complete Implementation Guide** — Java code templates ready to use
+
+**Read before starting Phase 1:** This significantly expands the system scope but is essential for anime-accurate ODM mechanics.
+
+---
+
 ## 🎮 KEYBIND SYSTEM SPECIFICATION
 
 ### Default Keybinds (Configurable)
@@ -362,12 +378,122 @@ public static void enforceRopeLength(LocalPlayer player, DynamicHookData hookDat
 
 ---
 
-### PHASE 4: Hotbar Switching While Grappling (Priority: MEDIUM)
+### PHASE 4A: Gas System & DEW Mechanics (Priority: CRITICAL)
+
+**Duration:** ~4-5 days  
+**Deliverable:** Fully functional gas-powered impulse system with anime-accurate mechanics
+
+**Pre-requisite:** Phase 1-3 completed (keybinds, physics, rope bending working)
+
+**Detailed Spec:** See `ROUND3_STAGE2_DEW_SPECIFICATION.md` for complete technical details
+
+#### 4A.1 Double-Tap Detection System
+- **File:** `src/main/java/com/armorberserk/daotcompat/input/DoubleTapDetector.java`
+- **Responsibility:**
+  - Detect SPACE×2 within 0.25–0.35 seconds (DEW)
+  - Detect S×2 within 0.25–0.35 seconds (Reverse DEW)
+  - Track press timing accurately
+  - Reset on cooldown
+- **Hook into:** `ClientTickEvent.Post` to poll keybind state
+
+#### 4A.2 Gas Management System
+- **File:** `src/main/java/com/armorberserk/daotcompat/gas/GasManager.java`
+- **Responsibility:**
+  - Track current gas (0–100%)
+  - Handle consumption (8–15% per DEW depending on conditions)
+  - Handle regeneration (1–5% per second depending on state)
+  - Expose gas level for HUD rendering
+- **Regeneration Rules:**
+  - Idle (grounded): 5% per second
+  - Walking: 3% per second
+  - Airborne: 1% per second
+  - Reel-in active: 4% per second
+
+#### 4A.3 DEW Impulse Calculator
+- **File:** `src/main/java/com/armorberserk/daotcompat/physics/DEWImpulseCalculator.java`
+- **Responsibility:**
+  - Calculate impulse vector based on:
+    - Player look direction (+ 15–20° upward tilt)
+    - Current velocity (momentum preservation)
+    - Rope tension multiplier (1.0–2.3x)
+    - Altitude modifier (0.85x on ground, 1.0x airborne)
+    - Current speed multiplier (+0.2–0.4x bonus)
+  - Support Reverse DEW (0.85x strength, opposite direction)
+- **Formula:**
+  ```
+  impulse = base_vector × rope_multiplier × altitude_multiplier × speed_multiplier
+  ```
+
+#### 4A.4 DEW Cooldown Manager
+- **File:** `src/main/java/com/armorberserk/daotcompat/physics/DEWCooldownManager.java`
+- **Responsibility:**
+  - Enforce 0.4–0.6 second cooldown between DEW uses
+  - Prevent spam (can't chain DEW faster than limit)
+  - Tick down cooldown timer each client tick
+  - Soft cooldown after high falls (20–40% strength reduction for 1–1.5s)
+
+#### 4A.5 Configuration File
+- **File:** `src/main/resources/config/daotcompat-gas.toml`
+- **Contains:**
+  - Gas tank capacity (default 100%)
+  - Consumption rates (dew_cost, reverse_dew_cost, etc.)
+  - Regeneration rates (idle, walking, airborne, reel_in)
+  - Impulse strength multipliers (rope tension, altitude, speed)
+  - Spark threshold and particle effects
+  - Tunable constants for balance adjustment
+
+**Key Values (from DEW Spec):**
+```toml
+[gas]
+max_gas = 100.0
+dew_cost = 10.0
+dew_rope_bonus_cost = 12.0
+reverse_dew_cost = 8.0
+
+[dew_mechanics]
+base_impulse = 2.5
+rope_weak_tension = 1.3
+rope_strong_tension = 2.3
+altitude_on_ground = 0.85
+cooldown_ms = 400
+```
+
+---
+
+### PHASE 4B: Spark Effects & Audio (Priority: HIGH)
+
+**Duration:** ~1-2 days  
+**Deliverable:** Visual & audio feedback for high-speed ground contact
+
+#### 4B.1 Spark Particle System
+- **File:** `src/main/java/com/armorberserk/daotcompat/render/SparkEffectRenderer.java`
+- **Trigger:** Player touches ground with horizontal speed ≥ 12 blocks/sec
+- **Effect:**
+  - Orange/yellow electric spark particles spawn at feet
+  - Particle count scales with speed (0–8 particles per tick)
+  - Particles drift backward (relative to movement)
+  - Lifetime 0.4–0.6 seconds with exponential fade
+  - Optional: Different colors by block type (ore = bright, stone = gray, etc.)
+
+#### 4B.2 Spark Sound Effect
+- **Responsibility:**
+  - Play metallic scrape/screech sound (~0.2 sec duration)
+  - Volume scales with speed (0.3–1.0 range)
+  - Pitch variation (0.8–1.2) for randomness
+  - Uses Minecraft's `GRINDSTONE_USE` or custom sound
+
+#### 4B.3 Spark Threshold Configuration
+- **Tunable:** `SPARK_THRESHOLD` in config (currently 12 blocks/sec)
+- **Adjustable by balance team** during Phase 6
+
+---
+
+### PHASE 5: Hotbar Switching While Grappling (Priority: MEDIUM)
 
 **Duration:** ~1-2 days  
 **Deliverable:** Player can swap inventory slots while holding rope
 
-#### 4.1 Create Hotbar Swap Keybind
+#### 5.1 Create Hotbar Swap Keybind
 - **File:** `src/main/java/com/armorberserk/daotcompat/input/GrappleKeybinds.java`
 - **New keybind:** `SWAP_HOTBAR` (no default, user-configurable)
 - **Behavior:**
@@ -375,7 +501,7 @@ public static void enforceRopeLength(LocalPlayer player, DynamicHookData hookDat
   - Switch `LocalPlayer.getInventory()` slot
   - Do NOT affect rope engagement/velocity
 
-#### 4.2 Hotbar Swap Event Handler
+#### 5.2 Hotbar Swap Event Handler
 - **File:** `src/main/java/com/armorberserk/daotcompat/input/HotbarSwapHandler.java`
 - **Hook into:** `ScreenEvent.Init` or `InputEvent.Key`
 - **Logic:**
@@ -506,19 +632,60 @@ rope_thickness = 2.0
 
 By end of Stage 2, the system should:
 
+### Core Keybind System
 - [x] Player must press SPACE to engage rope (not automatic)
 - [x] W key only accelerates AFTER SPACE is pressed
 - [x] SHIFT descends while holding SPACE
 - [x] Rope detaches if player releases SPACE
-- [x] Player falls with gravity when rope is slack
+- [x] All keybinds are user-configurable
+
+### Gas & DEW System
+- [x] Double-tap SPACE within 0.35s triggers DEW impulse
+- [x] DEW costs 10% gas (12% if rope engaged)
+- [x] DEW impulse direction = look direction + 15–20° upward tilt
+- [x] DEW strength multiplied by rope tension (1.0–2.3x)
+- [x] DEW strength multiplied by altitude (0.85x on ground)
+- [x] DEW strength bonus for existing velocity (+0.2–0.4x)
+- [x] Double-tap S triggers Reverse DEW (0.85x strength, opposite direction)
+- [x] Reverse DEW costs 8% gas (10% if rope engaged)
+- [x] 0.4s cooldown between DEW uses (prevents spam)
+- [x] Gas regenerates: 5% idle, 3% walking, 1% airborne, 4% reel-in
+- [x] Gas bar visible in HUD (green/yellow/red)
+- [x] Can't use DEW if gas < 8%
+
+### Spark & Audio Effects
+- [x] Sparks appear when horizontal speed ≥ 12 blocks/sec on ground
+- [x] Sparks are orange/yellow colored particles
+- [x] Spark particles fade out smoothly over 0.4–0.6s
+- [x] Spark sound (metallic scrape) plays at appropriate volume
+- [x] Spark volume scales with speed (0.3–1.0)
+- [x] Different spark colors possible by block type (optional)
+
+### Rope Integration
+- [x] Player falls with gravity when rope is slack (SPACE not held)
 - [x] Rope wraps around block obstacles
 - [x] Rope length limited to 48 blocks
-- [x] Hotbar can be swapped while grappling
+- [x] Rope detaches on dimension change
+- [x] DEW amplified when rope is under tension
+- [x] Rope oscillates after DEW impact (natural swinging)
+
+### Hotbar & Inventory
+- [x] Hotbar can be swapped while grappling (1-9 keys)
+- [x] Inventory swap doesn't affect rope or velocity
+- [x] Player can grab items without releasing rope
+
+### Rendering & Visual Feedback
 - [x] Rope renders with physics bends (not straight lines)
-- [x] All keybinds are user-configurable
+- [x] Rope color changes (green = engaged, yellow = slack, red = broken)
 - [x] No crashes when rope detaches / re-engages
+- [x] Smooth visual transitions between states
+
+### Compatibility
 - [x] Works on moving ships (Sable sub-levels)
 - [x] Works across dimensions (rope detaches on dimension change)
+- [x] Works with Create Aeronautics contraptions
+- [x] Compatible with GrappleHook mod physics reference
+- [x] No conflicts with vanilla Minecraft mechanics
 
 ---
 
@@ -530,14 +697,22 @@ src/main/java/com/armorberserk/daotcompat/
 │   ├── GrappleKeybinds.java          ← Keybind registration
 │   ├── GrappleStateManager.java      ← State tracking
 │   ├── KeybindEventListener.java     ← Event listener
+│   ├── DoubleTapDetector.java        ← Double-tap (DEW/Reverse DEW) detection
 │   └── HotbarSwapHandler.java        ← Hotbar logic
+├── gas/
+│   ├── GasManager.java               ← Gas tank & regeneration (NEW PHASE 4A)
+│   └── DEWCooldownManager.java       ← DEW cooldown tracking (NEW PHASE 4A)
 ├── physics/
 │   ├── GrapplePhysicsController.java ← Main physics engine (replaces ReelControl)
 │   ├── SableRopePhysicsIntegration.java ← Sable integration
-│   └── RopeLengthValidator.java      ← Max length checks
+│   ├── RopeLengthValidator.java      ← Max length checks
+│   ├── DEWImpulseCalculator.java     ← DEW impulse calculations (NEW PHASE 4A)
+│   └── DEWCooldownManager.java       ← Cooldown between DEW uses
 ├── render/
 │   ├── HookLineRenderer.java         ← Updated to use physics points
-│   └── RopeStateIndicator.java       ← Color feedback
+│   ├── RopeStateIndicator.java       ← Color feedback
+│   ├── SparkEffectRenderer.java      ← Spark particles on high-speed ground contact (NEW PHASE 4B)
+│   └── GasHUDRenderer.java           ← Gas tank HUD display (NEW PHASE 4A)
 ├── config/
 │   └── GrappleConfig.java            ← TOML config loading
 ├── [existing files unchanged]
@@ -546,9 +721,12 @@ src/main/java/com/armorberserk/daotcompat/
 │   ├── ThunderSpearFollower.java     ← Keep
 │   └── ...
 └── resources/
-    ├── lang/en_us.json               ← Add keybind descriptions
-    └── config/
-        └── daotcompat-keybinds.toml  ← Default config
+    ├── lang/en_us.json               ← Add keybind descriptions + gas terminology
+    ├── config/
+    │   ├── daotcompat-keybinds.toml  ← Default keybind config
+    │   └── daotcompat-gas.toml       ← Gas system config (NEW PHASE 4A)
+    └── sounds/
+        └── spark_scrape.ogg          ← Spark effect sound (NEW PHASE 4B, optional custom)
 ```
 
 ---
@@ -560,10 +738,14 @@ src/main/java/com/armorberserk/daotcompat/
 | 1: Keybind Infrastructure | 2-3 days | Week 1 | Week 1 | 📋 Planning |
 | 2: Rope Engagement & Physics | 3-4 days | Week 1-2 | Week 2 | ⏳ Blocked on Phase 1 |
 | 3: Rope Physics (Sable) | 4-5 days | Week 2 | Week 2-3 | ⏳ Blocked on Phase 2 |
-| 4: Hotbar Switching | 1-2 days | Week 2 | Week 2 | ⏳ Blocked on Phase 1 |
-| 5: Rendering & Feedback | 2-3 days | Week 3 | Week 3 | ⏳ Blocked on Phase 3 |
-| 6: Testing & Balance | 2-3 days | Week 3 | Week 3 | ⏳ Blocked on all |
-| **TOTAL** | **~14-20 days** | — | — | **📋 Planning** |
+| **4A: Gas System & DEW** | **4-5 days** | **Week 2-3** | **Week 3** | **⏳ Blocked on Phase 1** |
+| **4B: Spark Effects & Audio** | **1-2 days** | **Week 3** | **Week 3** | **⏳ Blocked on Phase 4A** |
+| 5: Hotbar Switching | 1-2 days | Week 2 | Week 2 | ⏳ Blocked on Phase 1 |
+| 6: Rendering & Feedback | 2-3 days | Week 3 | Week 3 | ⏳ Blocked on Phase 3 |
+| 7: Testing & Balance | 2-3 days | Week 3-4 | Week 4 | ⏳ Blocked on all |
+| **TOTAL** | **~18-25 days** | — | — | **📋 Planning** |
+
+**Note:** Phases 4A and 4B are new (DEW + Spark effects). They can start after Phase 1 (keybind infrastructure) is done, since they don't depend on Phase 2-3.
 
 ---
 
@@ -592,12 +774,32 @@ src/main/java/com/armorberserk/daotcompat/
 
 ---
 
-## 🔗 REFERENCES & LINKS
+## 🔗 REFERENCES
 
-- **Sable RopePhysicsObject:** `dev.ryanhcode.sable.api.physics.object.rope.RopePhysicsObject`
-- **GrappleHook Mod (reference):** Physics in `/home/user/workspace/grapple_ref/decompiled/`
-- **NeoForge Keybind Docs:** https://docs.neoforged.net/docs/input/keybinds
-- **This Repo:** https://github.com/MikasaAckerrman/daot-compat
+### Documentation Files (In This Repository)
+- **ROUND3_STAGE2_DEV_PLAN.md** ← You are here (keybinds, physics, hotbar)
+- **ROUND3_STAGE2_DEW_SPECIFICATION.md** — DEW/gas/spark system (REQUIRED READING)
+- **STAGE2_SETUP_GUIDE.md** — Environment setup & workflow
+- **RESOURCE_ARCHIVE.md** — Archive contents and deployment guide
+- **PLAN.txt** — Stage 1 handoff notes
+- **CHANGES.md** — Stage 1 changelog
+
+### NeoForge & Minecraft Documentation
+- **Keybind System:** https://docs.neoforged.net/docs/input/keybinds
+- **Event System:** https://docs.neoforged.net/docs/concepts/events
+- **Mixins:** https://docs.neoforged.net/docs/advanced/mixin
+- **Particle Engine:** https://docs.neoforged.net/docs/rendering/particles
+
+### Physics & Mod References
+- **Sable API:** `dev.ryanhcode.sable.api.physics.object.rope.RopePhysicsObject`
+- **GrappleHook Decompiled:** `/home/user/workspace/grapple_ref/decompiled/`
+- **Create Aeronautics:** https://github.com/Belgabor/Create-Aeronautics
+- **Sable GitHub:** https://github.com/ryanhcode/Sable
+
+### Repository
+- **Main Repo:** https://github.com/MikasaAckerrman/daot-compat
+- **Branch:** `round3-stage1-fixes` (current)
+- **Feature Branch:** `feature/stage2-keybind-system` (to create)
 
 ---
 
