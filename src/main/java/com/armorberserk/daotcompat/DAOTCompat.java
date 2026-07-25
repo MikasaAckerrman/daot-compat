@@ -12,6 +12,7 @@ import com.armorberserk.daotcompat.hook.ReelControl;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
 import com.armorberserk.daotcompat.input.KeybindEventListener;
 import com.armorberserk.daotcompat.physics.GrapplePhysicsController;
+import com.armorberserk.daotcompat.render.SparkEffectRenderer;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -69,6 +70,9 @@ public final class DAOTCompat {
             
             // Register Phase 1 keybinds (PULL_ROPE, ACCELERATE, DESCEND_ROPE, SWAP_HOTBAR, REVERSE_DEW)
             modBus.register(KeybindEventListener.class);
+            
+            // Register Phase 4B spark effects
+            modBus.register(SparkEffectRenderer.class);
 
             NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (ClientTickEvent.Post event) -> {
                 LocalPlayer player = Minecraft.getInstance().player;

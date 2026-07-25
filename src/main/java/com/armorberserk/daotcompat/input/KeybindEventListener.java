@@ -1,7 +1,11 @@
 package com.armorberserk.daotcompat.input;
 
+import com.armorberserk.daotcompat.gas.GasManager;
+import com.armorberserk.daotcompat.physics.DEWImpulseCalculator;
+import com.armorberserk.daotcompat.render.SparkEffectRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
@@ -10,21 +14,13 @@ import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 
 /**
- * Event listener for keybind state updates.
- * 
- * Hooks into:
- * - RegisterKeyMappingsEvent: Register our custom keybinds on startup
- * - ClientTickEvent.Post: Update keybind states every tick
- * - ScreenEvent.KeyPressed: Handle screen input
- * 
- * This is the bridge between NeoForge events and our keybind/physics systems.
+ * Event listener for keybind state updates, gas tick, and DEW processing.
  */
 @OnlyIn(Dist.CLIENT)
 public class KeybindEventListener {
     
     /**
      * Register all keybinds with the client.
-     * Called during mod initialization phase.
      */
     @SubscribeEvent
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
@@ -32,37 +28,43 @@ public class KeybindEventListener {
     }
     
     /**
-     * Called at the END of each client tick (after input processing).
-     * Updates GrappleStateManager with current keybind states.
+     * Called at the END of each client tick.
+     * Updates keybind states, gas tank, and processes DEW activation.
      */
     @SubscribeEvent
     public static void onClientTickEnd(ClientTickEvent.Post event) {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {
-            // Not in game, reset states
             GrappleStateManager.reset();
+            GasManager.reset();
+            DoubleTapDetector.reset();
             return;
         }
         
-        // Update keybind states every tick
+        // Update keybind states
         GrappleStateManager.updateState(player);
         
-        // Optional: Debug logging (remove in production)
-        // if (player.tickCount % 20 == 0) {
-        //     LOGGER.debug(GrappleStateManager.getDebugInfo());
-        // }
+        // Tick gas regeneration
+        GasManager.tick(player);
+        
+        // Check for DEW (double-tap SPACE)
+        if (DoubleTapDetector.detectDoubleTapSpace() && GasManager.canUseDEW()) {
+            GasManager.consumeForDEW();
+            Vec3 impulse = DEWImpulseCalculator.calculateDEW(player);
+            player.setDeltaMovement(player.getDeltaMovement().add(impulse));
+        }
+        
+        // Check for Reverse DEW (double-tap S)
+        if (DoubleTapDetector.detectDoubleTapS() && GasManager.canUseReverseDEW()) {
+            GasManager.consumeForReverseDEW();
+            Vec3 impulse = DEWImpulseCalculator.calculateReverseDEW(player);
+            player.setDeltaMovement(player.getDeltaMovement().add(impulse));
+        }
     }
     
-    /**
-     * Called before screen input is processed.
-     * Can be used to prevent keybind conflicts with UI elements.
-     * 
-     * Currently a placeholder - extend if needed for GUI-aware keybinds.
-     */
     @SubscribeEvent
     public static void onScreenKeyPress(ScreenEvent.KeyPressed.Pre event) {
-        // If a screen is open, we might want to disable some keybinds
-        // For now, keybinds work through the screen normally
-        // This can be extended to add special handling if needed
+        // Placeholder for future GUI-aware keybinds
     }
 }
+
