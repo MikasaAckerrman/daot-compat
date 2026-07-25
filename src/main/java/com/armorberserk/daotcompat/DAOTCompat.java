@@ -79,8 +79,11 @@ public final class DAOTCompat {
             // Phase 0: Mouse input handling (CRITICAL for rope release) [NEW v1.3.2]
             NeoForge.EVENT_BUS.register(MouseInputListener.class);
             
-            // Phase 1: Keybind handling (ClientTickEvent + ScreenEvent = FORGE events)
-            NeoForge.EVENT_BUS.register(KeybindEventListener.class);
+            // Phase 1: Keybind handling - CLIENT TICK (FIXED v1.3.2)
+            // Direct lambda call instead of @SubscribeEvent (avoids mobile crash)
+            NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post event) -> {
+                KeybindEventListener.onClientTickEnd();
+            });
             
             // Phase 3+: Rope rendering (RenderEvent = FORGE event)
             NeoForge.EVENT_BUS.register(RopeLineRenderer.class);

@@ -15,7 +15,7 @@ import net.neoforged.bus.api.SubscribeEvent;
  * They only released when SPACE was held. This is because there was
  * NO input listener tracking mouse clicks.
  * 
- * Solution: Monitor MouseScrollEvent and handle Left Click releases.
+ * Solution: Monitor raw mouse button state and handle Left Click releases.
  * When player releases LMB, both ropes should detach immediately.
  */
 @OnlyIn(Dist.CLIENT)
@@ -24,8 +24,10 @@ public class MouseInputListener {
     private static boolean wasLeftClickPressed = false;
     
     /**
-     * Monitor mouse click state every tick.
+     * Monitor mouse click state every frame.
      * When LMB is released (was pressed, now not pressed), release ropes.
+     * 
+     * FIXED (v1.3.2): Using InputEvent.MouseButton which is reliable.
      */
     @SubscribeEvent
     public static void onMouseInput(InputEvent.MouseButton event) {
@@ -61,5 +63,12 @@ public class MouseInputListener {
         if (rightHook != null) {
             AOTReflect.release(rightHook);
         }
+    }
+    
+    /**
+     * Reset state (for when player leaves world/game)
+     */
+    public static void reset() {
+        wasLeftClickPressed = false;
     }
 }

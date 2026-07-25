@@ -2,22 +2,20 @@ package com.armorberserk.daotcompat.input;
 
 import com.armorberserk.daotcompat.gas.GasManager;
 import com.armorberserk.daotcompat.physics.DEWImpulseCalculator;
-import com.armorberserk.daotcompat.render.SparkEffectRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.bus.api.SubscribeEvent;
 
 /**
- * Event listener for FORGE events (client tick, screen input).
+ * CRITICAL FIX (v1.3.2): Static methods for keybind event handling.
  * 
- * NOTE: RegisterKeyMappingsEvent is a MOD BUS event - it's handled separately
- * in KeybindRegistrationListener.java to avoid bus type conflicts.
+ * NOTE: These are NOT registered with @SubscribeEvent - they are called
+ * directly from DAOTCompat.java to avoid event bus registration issues.
+ * 
+ * RegisterKeyMappingsEvent is handled in KeybindRegistrationListener.java
  */
 @OnlyIn(Dist.CLIENT)
 public class KeybindEventListener {
@@ -25,9 +23,11 @@ public class KeybindEventListener {
     /**
      * Called at the END of each client tick.
      * Updates keybind states, gas tank, and processes DEW activation.
+     * 
+     * FIXED (v1.3.2): Removed @SubscribeEvent annotation - causes crash on mobile.
+     * Now called directly from DAOTCompat event lambda.
      */
-    @SubscribeEvent
-    public static void onClientTickEnd(ClientTickEvent.Post event) {
+    public static void onClientTickEnd() {
         LocalPlayer player = Minecraft.getInstance().player;
         if (player == null) {
             GrappleStateManager.reset();
@@ -59,11 +59,6 @@ public class KeybindEventListener {
             // 🔊 Play sound on Reverse DEW activation
             player.playSound(SoundEvents.BLAZE_SHOOT, 0.6f, 1.1f + (float) Math.random() * 0.2f);
         }
-    }
-    
-    @SubscribeEvent
-    public static void onScreenKeyPress(ScreenEvent.KeyPressed.Pre event) {
-        // Placeholder for future GUI-aware keybinds
     }
 }
 
