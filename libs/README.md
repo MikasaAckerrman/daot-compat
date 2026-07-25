@@ -2,10 +2,10 @@
 
 Сюда положи 4 JAR'а (compile-time зависимости для compat-мода):
 
-- `create-neoforge-1.21.1-6.0.10.jar`
-- `create_aeronautics-1.21.1-1.2.1.jar`
-- `sable-1.21.1-1.2.2.jar`
-- `dannys_aot-1.21.1-2.1.0.jar`
+- `create-1.21.1-6.0.10.jar`
+- `create-aeronautics-1.21.1-1.2.1.jar`
+- `sable-neoforge-1.21.1-1.2.2.jar`
+- `dannys-aot-fabric-1.21.1-2.2.0.jar`
 
 Точные имена не важны — Gradle подцепит по `libs/*.jar`.
 
