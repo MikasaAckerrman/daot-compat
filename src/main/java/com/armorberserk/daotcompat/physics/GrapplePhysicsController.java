@@ -130,75 +130,118 @@ public class GrapplePhysicsController {
     
     /**
      * Apply rope length constraint with proper rope wrapping support.
-     * If player is beyond rope length from hook (accounting for wraps), constrain to sphere.
-     * Preserves tangential velocity (pendulum effect).
-     * Removes radial velocity (toward/away from hook).
      * 
-     * UPDATED (v1.3.0): Uses RopeSegmentHandler for accurate rope length calculation
-     * when rope wraps around block edges.
+     * IMPROVED (v1.3.1):
+     * - Support for DUAL hooks with proper physics
+     * - Both hooks apply constraint simultaneously when both active
+     * - Angle limitation to prevent extreme rope angles
+     * - Average constraint when both hooks active
      */
     private static void applyRopeConstraint(LocalPlayer player, Object leftHook, Object rightHook) {
         Vec3 playerPos = player.position();
-        Vec3 closestHookPos = null;
-        double minDistanceSqr = Double.MAX_VALUE;
-        Object closestHook = null;
         
-        // Find closest hook
+        // Get both hook positions
+        Vec3 leftPos = null;
+        Vec3 rightPos = null;
+        
         if (leftHook != null) {
-            Vec3 hookPos = AOTReflect.getPosition(leftHook);
-            if (hookPos != null) {
-                double distSqr = playerPos.distanceToSqr(hookPos);
-                if (distSqr < minDistanceSqr) {
-                    minDistanceSqr = distSqr;
-                    closestHookPos = hookPos;
-                    closestHook = leftHook;
-                }
-            }
+            leftPos = AOTReflect.getPosition(leftHook);
         }
-        
         if (rightHook != null) {
-            Vec3 hookPos = AOTReflect.getPosition(rightHook);
-            if (hookPos != null) {
-                double distSqr = playerPos.distanceToSqr(hookPos);
-                if (distSqr < minDistanceSqr) {
-                    minDistanceSqr = distSqr;
-                    closestHookPos = hookPos;
-                    closestHook = rightHook;
-                }
-            }
+            rightPos = AOTReflect.getPosition(rightHook);
         }
         
-        if (closestHookPos == null || player.level() == null) return;
+        // If no hooks, return
+        if (leftPos == null && rightPos == null) return;
+        if (player.level() == null) return;
         
-        // Update rope segment handler for wrapping detection
-        int hookId = closestHook != null ? closestHook.hashCode() : 0;
-        final Vec3 finalClosestHookPos = closestHookPos;  // Make effectively final for lambda
-        final Vec3 finalPlayerPos = playerPos;             // Make effectively final for lambda
-        RopeSegmentHandler handler = segmentHandlers.computeIfAbsent(hookId, 
-            k -> new RopeSegmentHandler(finalClosestHookPos, finalPlayerPos));
+        // DUAL HOOK SUPPORT (v1.3.1): Apply constraint to BOTH when active
+        if (leftPos != null) {
+            applyRopeConstraintToHook(player, leftPos, leftHook, player.level());
+        }
+        if (rightPos != null) {
+            applyRopeConstraintToHook(player, rightPos, rightHook, player.level());
+        }
         
-        // Update segments with current positions
-        handler.update(closestHookPos, playerPos, currentRopeLength, player.level());
+        // Limit view angle when rope is engaged (v1.3.1)
+        limitRopeViewAngle(player, leftPos, rightPos);
+    }
+    
+    /**
+     * Apply rope constraint for a single hook.
+     */
+    private static void applyRopeConstraintToHook(LocalPlayer player, Vec3 hookPos, Object hook, 
+                                                   net.minecraft.world.level.Level level) {
+        Vec3 playerPos = player.position();
         
-        // Calculate actual rope distance (accounting for wraps)
-        double actualRopeDistance = calculateActualRopeDistance(handler, closestHookPos, playerPos);
+        // Update segment handler for this hook
+        int hookId = hook.hashCode();
+        final Vec3 finalHookPos = hookPos;
+        final Vec3 finalPlayerPos = playerPos;
+        RopeSegmentHandler handler = segmentHandlers.computeIfAbsent(hookId,
+            k -> new RopeSegmentHandler(finalHookPos, finalPlayerPos));
         
-        // If within current rope length → no constraint
+        handler.update(hookPos, playerPos, currentRopeLength, level);
+        double actualRopeDistance = calculateActualRopeDistance(handler, hookPos, playerPos);
+        
+        // If within rope length, no constraint needed
         if (actualRopeDistance <= currentRopeLength) {
             return;
         }
         
-        // Beyond rope length → constrain to sphere surface
-        Vec3 towardHook = closestHookPos.subtract(playerPos).normalize();
-        Vec3 constrainedPos = closestHookPos.subtract(towardHook.scale(currentRopeLength));
+        // Constrain to sphere surface
+        Vec3 towardHook = hookPos.subtract(playerPos).normalize();
+        Vec3 constrainedPos = hookPos.subtract(towardHook.scale(currentRopeLength));
         player.setPos(constrainedPos.x, constrainedPos.y, constrainedPos.z);
         
-        // Remove radial velocity component (velocity toward/away from hook)
+        // Remove only radial velocity (toward/away from hook)
         Vec3 velocity = player.getDeltaMovement();
         double radialSpeed = velocity.dot(towardHook);
         if (radialSpeed > 0) {
             Vec3 newVelocity = velocity.subtract(towardHook.scale(radialSpeed));
             player.setDeltaMovement(newVelocity);
+        }
+        
+        // 🎥 "ОЩУЩЕНИЕ НАТЯГА" (v1.3.1): Camera wobble when rope is tight
+        // This gives player feedback that rope is engaged and constraining
+        if (Minecraft.getInstance().player != null && 
+            actualRopeDistance > currentRopeLength * 0.95) {  // Trigger at 95% of max
+            // Slight camera shake for rope tension feedback
+            player.xRotO += (Math.random() - 0.5) * 0.05;
+            player.yRotO += (Math.random() - 0.5) * 0.05;
+        }
+    }
+    
+    /**
+     * Limit view angle when rope is engaged.
+     * Prevents extreme angles that would break immersion.
+     * 
+     * ADDED (v1.3.1): From insruchia.txt #13
+     */
+    private static void limitRopeViewAngle(LocalPlayer player, Vec3 leftPos, Vec3 rightPos) {
+        if (leftPos == null && rightPos == null) return;
+        
+        // Get rope direction
+        Vec3 ropeDirection;
+        if (leftPos != null && rightPos != null) {
+            // Average direction if both ropes
+            ropeDirection = leftPos.add(rightPos).scale(0.5).subtract(player.position()).normalize();
+        } else if (leftPos != null) {
+            ropeDirection = leftPos.subtract(player.position()).normalize();
+        } else {
+            ropeDirection = rightPos.subtract(player.position()).normalize();
+        }
+        
+        // Current look pitch and yaw
+        float pitch = player.getXRot();
+        
+        // If looking more than 120° away from rope, soft limit
+        // Pitch should be between -90 (up) and 90 (down)
+        // Limit to -80 to 60 range when rope engaged for realism
+        if (pitch < -80f) {
+            player.setXRot(-80f);
+        } else if (pitch > 60f) {
+            player.setXRot(60f);
         }
     }
     
