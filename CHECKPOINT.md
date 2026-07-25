@@ -15,35 +15,35 @@
 - [x] Code snippets provided for all fixes
 - [x] Environment snapshot documented
 
+## ✅ COMPLETED (This Session)
+
+- [x] **Task 1.1: Disable Auto-Grapple Attraction** ✅ DONE (3cbc5d0)
+  - Removed PULL_STRENGTH + ACCEL_STRENGTH
+  - Removed `vel.add(pullDir.scale(pull))` magnet logic
+  - Added `applyRopeConstraint()` function
+  - Result: Zacepka → no auto-fly, tension only
+  - JAR: 55 KB, BUILD SUCCESS
+  - Commit: 3cbc5d0
+
 ---
 
-## 🔴 STARTING NOW - TIER 1 TASKS
+## 🚀 IN PROGRESS - TIER 1 TASKS (Remaining)
 
-### Task 1.1: Disable Auto-Grapple Attraction
+### Task 1.2: Rope Tension Physics
 **File:** `src/main/java/com/armorberserk/daotcompat/physics/GrapplePhysicsController.java`
 
 **Status:** NOT STARTED
 
-**What to do:**
-- Find: `velocity += (hook - player).normalize() * pullForce`
-- Change: Remove automatic velocity modification
-- Only constraint distance, don't move player
+**What was done in 1.1:**
+- Created `applyRopeConstraint()` function
+- It constrains distance to MAX_ROPE_LENGTH
+- Preserves tangential velocity
+- Removes radial velocity
 
-**Expected result:** 
-- Zacepka → should NOT auto-fly
-- JAR still compiles
-
----
-
-### Task 1.2: Rope Tension Physics
-**File:** Same file
-
-**Status:** NOT STARTED
-
-**What to do:**
-- Add rope length constraint
-- If distance > MAX_ROPE_LENGTH → return to sphere
-- Keep tangential velocity (pendulum effect)
+**What needs completion:**
+- Test that constraint actually works
+- Verify rope tension feels right
+- Make sure no new bugs introduced
 
 ---
 
