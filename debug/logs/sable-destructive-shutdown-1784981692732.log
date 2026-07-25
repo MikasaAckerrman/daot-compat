@@ -1,0 +1,20 @@
+=== Sable: Destructive shutdown snapshot ===
+time:              Sat Jul 25 16:14:52 GMT+04:00 2026
+queue_size:        0
+offered_total:     0
+dropped_full:      0
+dropped_dedup:     0
+processed:         0
+active_detached:   0
+errors_this_min:   0
+emergency_disable: false
+
+=== Config snapshot ===
+enabled:                     true
+absoluteMaxSpeed:            350.0
+detachSafeSpeedCeiling:      100.0
+maxDetachesPerSecond:        18
+maxActiveDetachedSubLevels:  64
+forbidDetachOnGroundImpact:  false
+guardAgainstMidStepMutation: false
+detachCooldownMs:            25
