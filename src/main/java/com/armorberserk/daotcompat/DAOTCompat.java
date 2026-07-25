@@ -71,16 +71,20 @@ public final class DAOTCompat {
                     event.register(DAOTCompatKeyMappings.HANG));
             
             // Register Phase 1 keybinds (PULL_ROPE, ACCELERATE, DESCEND_ROPE, SWAP_HOTBAR, REVERSE_DEW)
-            modBus.register(KeybindEventListener.class);
+            // NOTE: ClientTickEvent is a NEOFORGE event, not a MOD event - use NeoForge.EVENT_BUS
+            NeoForge.EVENT_BUS.register(KeybindEventListener.class);
             
             // Register Phase 3+ rope rendering (with Sable wrapping support)
-            modBus.register(RopeLineRenderer.class);
+            // NOTE: Render events are NEOFORGE events - use NeoForge.EVENT_BUS
+            NeoForge.EVENT_BUS.register(RopeLineRenderer.class);
             
             // Register Phase 4B spark effects
-            modBus.register(SparkEffectRenderer.class);
+            // NOTE: Render events are NEOFORGE events - use NeoForge.EVENT_BUS
+            NeoForge.EVENT_BUS.register(SparkEffectRenderer.class);
             
             // Register Phase 5 hotbar swapping
-            modBus.register(HotbarSwapHandler.class);
+            // NOTE: Input/Screen events are NEOFORGE events - use NeoForge.EVENT_BUS
+            NeoForge.EVENT_BUS.register(HotbarSwapHandler.class);
 
             NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (ClientTickEvent.Post event) -> {
                 LocalPlayer player = Minecraft.getInstance().player;
