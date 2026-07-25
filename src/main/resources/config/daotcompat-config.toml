@@ -1,0 +1,57 @@
+# DAOT Compat Configuration
+
+[keybinds]
+# Default keybinds (Minecraft key names)
+pull_rope = "space"
+accelerate = "key.w"
+descend_rope = "key.shift"
+reverse_dew = "key.s"
+swap_hotbar = ""
+
+[physics]
+# Rope mechanics
+pull_strength = 0.15
+acceleration_strength = 0.20
+descend_speed = 0.10
+max_rope_length = 48.0
+
+# DEW (gas impulse)
+dew_base_impulse = 2.5
+dew_upward_tilt = 17.5  # degrees
+dew_reverse_multiplier = 0.85
+dew_cooldown_ms = 400
+
+[gas]
+# Tank mechanics
+max_gas = 100.0
+dew_cost = 10.0
+reverse_dew_cost = 8.0
+
+# Regeneration rates (% per second)
+regen_idle = 5.0
+regen_walking = 3.0
+regen_airborne = 1.0
+regen_reel_in = 4.0
+
+[effects]
+# Spark effects
+spark_threshold = 12.0  # blocks/sec
+spark_particle_count = 8
+spark_lifetime_ticks = 12
+
+# Sound
+spark_sound_enabled = true
+spark_sound_volume_base = 0.5
+spark_sound_volume_max = 0.9
+
+[balance]
+# Rope tension multipliers
+rope_no_tension = 1.0
+rope_weak_tension = 1.3
+rope_medium_tension = 1.6
+rope_strong_tension = 2.3
+
+# Altitude modifiers
+altitude_on_ground = 0.85
+altitude_airborne = 1.0
+altitude_water = 0.6
