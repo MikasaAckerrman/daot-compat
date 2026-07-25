@@ -53,34 +53,51 @@ public class GrapplePhysicsController {
     private static boolean prevLeftHookActive = false;
     private static boolean prevRightHookActive = false;
     
+    // Sound cooldown to prevent spam [FIX v1.3.2]
+    private static int leftHookSoundCooldown = 0;
+    private static int rightHookSoundCooldown = 0;
+    private static final int SOUND_COOLDOWN_TICKS = 5;  // Minimum 5 ticks between sounds
+    
+    // Collision check cooldown to prevent lag [FIX v1.3.2]
+    private static int collisionCheckCooldown = 0;
+    private static final int COLLISION_CHECK_INTERVAL = 10;  // Check every 10 ticks (not every tick)
+    
     public static void tick(LocalPlayer player, Object leftHook, Object rightHook) {
         // Hook objects passed as parameters (cached from DAOTCompat)
         // Avoids expensive AOTReflect calls here
+        
+        // Decrement sound cooldowns [FIX v1.3.2]
+        if (leftHookSoundCooldown > 0) leftHookSoundCooldown--;
+        if (rightHookSoundCooldown > 0) rightHookSoundCooldown--;
         
         boolean hasLeft = leftHook != null;
         boolean hasRight = rightHook != null;
         
         // 🔊 SOUND EFFECTS FOR ROPE ENGAGEMENT
-        // Left hook zipped/unzipped
-        if (hasLeft && !prevLeftHookActive) {
+        // Left hook zipped/unzipped [FIXED v1.3.2: Added cooldown]
+        if (hasLeft && !prevLeftHookActive && leftHookSoundCooldown <= 0) {
             // 🎯 Rope attached to surface
             playRopeHookSound(player, true);
             prevLeftHookActive = true;
-        } else if (!hasLeft && prevLeftHookActive) {
+            leftHookSoundCooldown = SOUND_COOLDOWN_TICKS;
+        } else if (!hasLeft && prevLeftHookActive && leftHookSoundCooldown <= 0) {
             // ❌ Rope broke/released
             playRopeBreakSound(player);
             prevLeftHookActive = false;
+            leftHookSoundCooldown = SOUND_COOLDOWN_TICKS;
         }
         
-        // Right hook zipped/unzipped
-        if (hasRight && !prevRightHookActive) {
+        // Right hook zipped/unzipped [FIXED v1.3.2: Added cooldown]
+        if (hasRight && !prevRightHookActive && rightHookSoundCooldown <= 0) {
             // 🎯 Rope attached to surface
             playRopeHookSound(player, false);
             prevRightHookActive = true;
-        } else if (!hasRight && prevRightHookActive) {
+            rightHookSoundCooldown = SOUND_COOLDOWN_TICKS;
+        } else if (!hasRight && prevRightHookActive && rightHookSoundCooldown <= 0) {
             // ❌ Rope broke/released
             playRopeBreakSound(player);
             prevRightHookActive = false;
+            rightHookSoundCooldown = SOUND_COOLDOWN_TICKS;
         }
         
         // No hooks → normal gravity, reset rope length
@@ -272,8 +289,19 @@ public class GrapplePhysicsController {
      * Task 1.3: Check if rope collides with blocks.
      * If rope hits a block (not hook location), break the hook.
      * 🔊 Plays break sound when rope snaps.
+     * 
+     * OPTIMIZED (v1.3.2): Only check collision every 10 ticks to prevent lag.
      */
     private static void checkRopeCollision(LocalPlayer player, Object leftHook, Object rightHook) {
+        // Decrement cooldown
+        if (collisionCheckCooldown > 0) {
+            collisionCheckCooldown--;
+            return;  // Skip this check, too soon
+        }
+        
+        // Reset cooldown
+        collisionCheckCooldown = COLLISION_CHECK_INTERVAL;
+        
         // Check left hook
         if (leftHook != null) {
             Vec3 hookPos = AOTReflect.getPosition(leftHook);

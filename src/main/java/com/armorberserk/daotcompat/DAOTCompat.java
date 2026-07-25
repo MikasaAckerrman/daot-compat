@@ -12,6 +12,7 @@ import com.armorberserk.daotcompat.hook.RemoteHookFollower;
 import com.armorberserk.daotcompat.input.HotbarSwapHandler;
 import com.armorberserk.daotcompat.input.KeybindEventListener;
 import com.armorberserk.daotcompat.input.KeybindRegistrationListener;
+import com.armorberserk.daotcompat.input.MouseInputListener;
 import com.armorberserk.daotcompat.physics.GrapplePhysicsController;
 import com.armorberserk.daotcompat.render.RopeLineRenderer;
 import com.armorberserk.daotcompat.render.RopeWrapParticles;
@@ -74,6 +75,9 @@ public final class DAOTCompat {
             
             // ========== NEOFORGE EVENT BUS EVENTS ==========
             // ClientTickEvent, ScreenEvent are FORGE events - register on NeoForge.EVENT_BUS
+            
+            // Phase 0: Mouse input handling (CRITICAL for rope release) [NEW v1.3.2]
+            NeoForge.EVENT_BUS.register(MouseInputListener.class);
             
             // Phase 1: Keybind handling (ClientTickEvent + ScreenEvent = FORGE events)
             NeoForge.EVENT_BUS.register(KeybindEventListener.class);
