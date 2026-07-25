@@ -1,4 +1,9 @@
 {
   "key.categories.daotcompat": "Крюки ODM (DAOT Compat)",
-  "key.daotcompat.hang": "Придержать трос (не тянуть)"
+  "key.daotcompat.hang": "Придержать трос (не тянуть)",
+  "key.daotcompat.pull_rope": "Зацепиться / Подтянуться (держать)",
+  "key.daotcompat.accelerate": "Ускорение вперёд",
+  "key.daotcompat.descend_rope": "Опуститься / Ослабить натяжение",
+  "key.daotcompat.swap_hotbar": "Сменить хотбар (во время зацепа)",
+  "key.daotcompat.reverse_dew": "Обратный DEW (двойное нажатие S)"
 }

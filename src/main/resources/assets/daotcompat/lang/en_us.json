@@ -1,4 +1,9 @@
 {
   "key.categories.daotcompat": "ODM Hooks (DAOT Compat)",
-  "key.daotcompat.hang": "Hang (Stop Pull)"
+  "key.daotcompat.hang": "Hang (Stop Pull)",
+  "key.daotcompat.pull_rope": "Engage / Reel-In (Hold)",
+  "key.daotcompat.accelerate": "Accelerate Forward",
+  "key.daotcompat.descend_rope": "Descend / Release Tension",
+  "key.daotcompat.swap_hotbar": "Swap Hotbar (While Grappling)",
+  "key.daotcompat.reverse_dew": "Reverse DEW (Double-Tap S)"
 }
