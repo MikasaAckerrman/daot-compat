@@ -2,7 +2,7 @@ package com.armorberserk.daotcompat.input;
 
 import net.minecraft.client.player.LocalPlayer;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.neoforge.api.distmarker.OnlyIn;
+import net.neoforged.api.distmarker.OnlyIn;
 
 /**
  * Centralized state tracker for all keybind-related grappling mechanics.

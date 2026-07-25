@@ -3,8 +3,9 @@ package com.armorberserk.daotcompat.input;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.neoforge.api.distmarker.OnlyIn;
+import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 
@@ -12,13 +13,23 @@ import net.neoforged.bus.api.SubscribeEvent;
  * Event listener for keybind state updates.
  * 
  * Hooks into:
- * - ClientTickEvent.Post: Update keybind states every tick
  * - RegisterKeyMappingsEvent: Register our custom keybinds on startup
+ * - ClientTickEvent.Post: Update keybind states every tick
+ * - ScreenEvent.KeyPressed: Handle screen input
  * 
  * This is the bridge between NeoForge events and our keybind/physics systems.
  */
 @OnlyIn(Dist.CLIENT)
 public class KeybindEventListener {
+    
+    /**
+     * Register all keybinds with the client.
+     * Called during mod initialization phase.
+     */
+    @SubscribeEvent
+    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
+        GrappleKeybinds.registerKeybinds(event);
+    }
     
     /**
      * Called at the END of each client tick (after input processing).
@@ -53,13 +64,5 @@ public class KeybindEventListener {
         // If a screen is open, we might want to disable some keybinds
         // For now, keybinds work through the screen normally
         // This can be extended to add special handling if needed
-    }
-    
-    /**
-     * Register keybinds with the client on startup.
-     * This must be called during mod initialization or ClientSetupEvent.
-     */
-    public static void init() {
-        GrappleKeybinds.registerKeybinds();
     }
 }

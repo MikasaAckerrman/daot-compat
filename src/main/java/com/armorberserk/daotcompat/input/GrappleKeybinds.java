@@ -1,12 +1,11 @@
 package com.armorberserk.daotcompat.input;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.neoforge.api.distmarker.OnlyIn;
-import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import org.lwjgl.glfw.GLFW;
-import com.mojang.blaze3d.platform.InputConstants;
-import net.minecraft.client.Minecraft;
 
 /**
  * Central registry for all ODM grappling keybinds.
@@ -26,26 +25,30 @@ public class GrappleKeybinds {
     // Rope engagement keybinds
     public static final KeyMapping PULL_ROPE = new KeyMapping(
         "key.daotcompat.pull_rope",
-        InputConstants.KEY_SPACE,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_SPACE,
         CATEGORY
     );
     
     public static final KeyMapping ACCELERATE = new KeyMapping(
         "key.daotcompat.accelerate",
-        InputConstants.KEY_W,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_W,
         CATEGORY
     );
     
     public static final KeyMapping DESCEND_ROPE = new KeyMapping(
         "key.daotcompat.descend_rope",
-        InputConstants.KEY_LEFT_SHIFT,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_LEFT_SHIFT,
         CATEGORY
     );
     
     // Inventory management while grappling
     public static final KeyMapping SWAP_HOTBAR = new KeyMapping(
         "key.daotcompat.swap_hotbar",
-        InputConstants.UNKNOWN.getKey(),  // No default binding
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_UNKNOWN,  // No default binding
         CATEGORY
     );
     
@@ -54,37 +57,21 @@ public class GrappleKeybinds {
     // Reverse DEW is detected via double-tap of a movement key (S)
     public static final KeyMapping REVERSE_DEW = new KeyMapping(
         "key.daotcompat.reverse_dew",
-        InputConstants.KEY_S,
+        InputConstants.Type.KEYSYM,
+        GLFW.GLFW_KEY_S,
         CATEGORY
     );
     
     /**
      * Register all keybinds with the client.
-     * Call this during ClientSetupEvent.
+     * Call this during RegisterKeyMappingsEvent.
      */
-    public static void registerKeybinds() {
-        Minecraft minecraft = Minecraft.getInstance();
-        
-        minecraft.options.keyBindings = expandKeyBindings(
-            minecraft.options.keyBindings,
-            new KeyMapping[]{
-                PULL_ROPE,
-                ACCELERATE,
-                DESCEND_ROPE,
-                SWAP_HOTBAR,
-                REVERSE_DEW
-            }
-        );
-    }
-    
-    /**
-     * Helper method to expand the keybindings array with new bindings.
-     */
-    private static KeyMapping[] expandKeyBindings(KeyMapping[] existing, KeyMapping[] newBindings) {
-        KeyMapping[] result = new KeyMapping[existing.length + newBindings.length];
-        System.arraycopy(existing, 0, result, 0, existing.length);
-        System.arraycopy(newBindings, 0, result, existing.length, newBindings.length);
-        return result;
+    public static void registerKeybinds(RegisterKeyMappingsEvent event) {
+        event.register(PULL_ROPE);
+        event.register(ACCELERATE);
+        event.register(DESCEND_ROPE);
+        event.register(SWAP_HOTBAR);
+        event.register(REVERSE_DEW);
     }
     
     /**

@@ -2,7 +2,7 @@ package com.armorberserk.daotcompat.input;
 
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.neoforge.api.distmarker.OnlyIn;
+import net.neoforged.api.distmarker.OnlyIn;
 
 /**
  * Detects double-tap inputs for DEW and Reverse DEW mechanics.

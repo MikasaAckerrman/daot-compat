@@ -10,6 +10,7 @@ import com.armorberserk.daotcompat.collision.HighSpeedSubLevelGuard;
 import com.armorberserk.daotcompat.hook.HookTransformResolver;
 import com.armorberserk.daotcompat.hook.ReelControl;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
+import com.armorberserk.daotcompat.input.KeybindEventListener;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -64,6 +65,9 @@ public final class DAOTCompat {
         if (FMLEnvironment.dist.isClient()) {
             modBus.addListener((RegisterKeyMappingsEvent event) ->
                     event.register(DAOTCompatKeyMappings.HANG));
+            
+            // Register Phase 1 keybinds (PULL_ROPE, ACCELERATE, DESCEND_ROPE, SWAP_HOTBAR, REVERSE_DEW)
+            modBus.register(KeybindEventListener.class);
 
             NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (ClientTickEvent.Post event) -> {
                 LocalPlayer player = Minecraft.getInstance().player;
