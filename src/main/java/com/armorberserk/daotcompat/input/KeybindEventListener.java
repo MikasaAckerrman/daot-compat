@@ -26,13 +26,20 @@ public class KeybindEventListener {
      * 
      * FIXED (v1.3.2): Removed @SubscribeEvent annotation - causes crash on mobile.
      * Now called directly from DAOTCompat event lambda.
+     * 
+     * FIXED (v1.3.4): Added MouseInputListener.tick() call.
      */
     public static void onClientTickEnd() {
         LocalPlayer player = Minecraft.getInstance().player;
+        
+        // Track mouse button state for rope release [FIXED v1.3.4]
+        MouseInputListener.tick();
+        
         if (player == null) {
             GrappleStateManager.reset();
             GasManager.reset();
             DoubleTapDetector.reset();
+            MouseInputListener.reset();
             return;
         }
         
