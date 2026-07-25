@@ -99,8 +99,8 @@ public final class DAOTCompat {
                 // Phase 2: New rope physics controller (replaces old ReelControl logic)
                 GrapplePhysicsController.tick(player);
                 
-                // ReelControl kept for backward compatibility if needed
-                ReelControl.apply(player);
+                // DISABLED (v1.2.0): ReelControl conflicts with new GrapplePhysicsController
+                // ReelControl.apply(player);  // OLD CODE - no longer needed
 
                 // Safety net against tunnelling through a sub-level (airship) at ODM speeds. Runs
                 // last so its velocity clamp isn't overwritten; a no-op away from ships / at slow
