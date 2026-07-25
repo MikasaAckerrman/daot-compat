@@ -9,23 +9,17 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 
 /**
- * Event listener for keybind state updates, gas tick, and DEW processing.
+ * Event listener for FORGE events (client tick, screen input).
+ * 
+ * NOTE: RegisterKeyMappingsEvent is a MOD BUS event - it's handled separately
+ * in KeybindRegistrationListener.java to avoid bus type conflicts.
  */
 @OnlyIn(Dist.CLIENT)
 public class KeybindEventListener {
-    
-    /**
-     * Register all keybinds with the client.
-     */
-    @SubscribeEvent
-    public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
-        GrappleKeybinds.registerKeybinds(event);
-    }
     
     /**
      * Called at the END of each client tick.

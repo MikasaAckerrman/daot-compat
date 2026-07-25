@@ -12,6 +12,7 @@ import com.armorberserk.daotcompat.hook.ReelControl;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
 import com.armorberserk.daotcompat.input.HotbarSwapHandler;
 import com.armorberserk.daotcompat.input.KeybindEventListener;
+import com.armorberserk.daotcompat.input.KeybindRegistrationListener;
 import com.armorberserk.daotcompat.physics.GrapplePhysicsController;
 import com.armorberserk.daotcompat.render.RopeLineRenderer;
 import com.armorberserk.daotcompat.render.SparkEffectRenderer;
@@ -67,23 +68,23 @@ public final class DAOTCompat {
 
         // Client: a single LOWEST-priority post-client-tick pass. See class javadoc "Fix 1".
         if (FMLEnvironment.dist.isClient()) {
-            modBus.addListener((RegisterKeyMappingsEvent event) ->
-                    event.register(DAOTCompatKeyMappings.HANG));
+            // ========== MOD BUS EVENTS ==========
+            // RegisterKeyMappingsEvent is a MOD event - must register on MOD_BUS
+            modBus.register(KeybindRegistrationListener.class);
             
-            // Register Phase 1 keybinds (PULL_ROPE, ACCELERATE, DESCEND_ROPE, SWAP_HOTBAR, REVERSE_DEW)
-            // NOTE: ClientTickEvent is a NEOFORGE event, not a MOD event - use NeoForge.EVENT_BUS
+            // ========== NEOFORGE EVENT BUS EVENTS ==========
+            // ClientTickEvent, ScreenEvent are FORGE events - register on NeoForge.EVENT_BUS
+            
+            // Phase 1: Keybind handling (ClientTickEvent + ScreenEvent = FORGE events)
             NeoForge.EVENT_BUS.register(KeybindEventListener.class);
             
-            // Register Phase 3+ rope rendering (with Sable wrapping support)
-            // NOTE: Render events are NEOFORGE events - use NeoForge.EVENT_BUS
+            // Phase 3+: Rope rendering (RenderEvent = FORGE event)
             NeoForge.EVENT_BUS.register(RopeLineRenderer.class);
             
-            // Register Phase 4B spark effects
-            // NOTE: Render events are NEOFORGE events - use NeoForge.EVENT_BUS
+            // Phase 4B: Spark effects (RenderEvent = FORGE event)
             NeoForge.EVENT_BUS.register(SparkEffectRenderer.class);
             
-            // Register Phase 5 hotbar swapping
-            // NOTE: Input/Screen events are NEOFORGE events - use NeoForge.EVENT_BUS
+            // Phase 5: Hotbar swapping (ScreenEvent = FORGE event)
             NeoForge.EVENT_BUS.register(HotbarSwapHandler.class);
 
             NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (ClientTickEvent.Post event) -> {
