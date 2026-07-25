@@ -11,6 +11,7 @@ import com.armorberserk.daotcompat.hook.HookTransformResolver;
 import com.armorberserk.daotcompat.hook.ReelControl;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
 import com.armorberserk.daotcompat.input.KeybindEventListener;
+import com.armorberserk.daotcompat.physics.GrapplePhysicsController;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -77,7 +78,12 @@ public final class DAOTCompat {
                 Object right = AOTReflect.getRightHook();
                 if (left != null) HookTransformResolver.process(player.level(), left);
                 if (right != null) HookTransformResolver.process(player.level(), right);
-                ReelControl.apply(player); // only touches velocity while HANG is held
+                
+                // Phase 2: New rope physics controller (replaces old ReelControl logic)
+                GrapplePhysicsController.tick(player);
+                
+                // ReelControl kept for backward compatibility if needed
+                ReelControl.apply(player);
 
                 // Safety net against tunnelling through a sub-level (airship) at ODM speeds. Runs
                 // last so its velocity clamp isn't overwritten; a no-op away from ships / at slow
