@@ -2,21 +2,28 @@ package com.armorberserk.daotcompat.physics;
 
 import com.armorberserk.daotcompat.aot.AOTReflect;
 import com.armorberserk.daotcompat.input.GrappleStateManager;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.level.ClipContext;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
 /**
- * Phase 2 REWRITE (v1.2.0): Rope physics controller with proper constraints.
+ * Phase 2 REWRITE (v1.2.0): Rope physics with collision detection.
  *
- * CRITICAL FIX: Removed auto-grapple attraction (magnet effect)
+ * CRITICAL FIXES:
+ * 1. Removed auto-grapple attraction (magnet effect)
+ * 2. Added rope length constraint
+ * 3. Added rope collision detection (Task 1.3)
  * 
  * New Logic:
  * - Hooks create TENSION (constraint), not force
- * - SPACE held → Prepares pulling (no auto-pull yet)
- * - Rope distance is LIMITED (MAX_ROPE_LENGTH)
- * - Player velocity is PRESERVED (inertia works)
+ * - Rope distance LIMITED to MAX_ROPE_LENGTH
+ * - Rope collision with blocks → rope breaks
+ * - Player velocity PRESERVED (inertia)
+ * - SPACE held → prepares pulling (no auto-pull yet)
  * 
  * Future (Task 2.2):
  * - SPACE will shorten rope for actual pulling
@@ -27,7 +34,7 @@ public class GrapplePhysicsController {
     
     private static final double MAX_ROPE_LENGTH = 48.0;  // blocks
     private static final double DESCEND_SPEED = 0.10;
-    private static final double MIN_HOOK_RADIUS_SQR = 4.0;  // Too close to anchor
+    private static final double MIN_HOOK_RADIUS_SQR = 4.0;
     
     public static void tick(LocalPlayer player) {
         Object leftHook = AOTReflect.getLeftHook();
@@ -39,18 +46,18 @@ public class GrapplePhysicsController {
         // No hooks → normal gravity
         if (!hasLeft && !hasRight) return;
         
-        // Hooks exist → apply rope constraint (limit distance)
-        // This applies regardless of SPACE, gives tension feel
+        // Task 1.3: Check rope collision (raycast from hook to player)
+        checkRopeCollision(player, leftHook, rightHook);
+        
+        // Apply rope constraint (limit distance)
         applyRopeConstraint(player, leftHook, rightHook);
         
-        // SPACE held → Prepare pulling (no auto-velocity added)
-        // TODO (Task 2.2): Implement rope shortening here
+        // SPACE held → prepare pulling (no auto-velocity)
         if (GrappleStateManager.isPullingRope()) {
-            // Currently just holding tension
-            // Future: shorten currentRopeLength
+            // TODO (Task 2.2): Implement rope shortening here
         }
         
-        // SHIFT held → Controlled descent (small downward velocity)
+        // SHIFT held → controlled descent
         if (GrappleStateManager.isDescending()) {
             player.setDeltaMovement(player.getDeltaMovement().add(0, -DESCEND_SPEED, 0));
         }
@@ -58,7 +65,7 @@ public class GrapplePhysicsController {
     
     /**
      * Apply rope length constraint.
-     * If player is beyond MAX_ROPE_LENGTH from hook(s), return them to the boundary.
+     * If player is beyond MAX_ROPE_LENGTH from hook, return them to the boundary.
      * Preserves tangential velocity (pendulum effect).
      * Removes radial velocity (toward/away from hook).
      */
@@ -108,9 +115,52 @@ public class GrapplePhysicsController {
         Vec3 velocity = player.getDeltaMovement();
         double radialSpeed = velocity.dot(towardHook);
         if (radialSpeed > 0) {
-            // Remove outward radial component
             Vec3 newVelocity = velocity.subtract(towardHook.scale(radialSpeed));
             player.setDeltaMovement(newVelocity);
         }
+    }
+
+    /**
+     * Task 1.3: Check if rope collides with blocks.
+     * If rope hits a block (not hook location), break the hook.
+     */
+    private static void checkRopeCollision(LocalPlayer player, Object leftHook, Object rightHook) {
+        // Check left hook
+        if (leftHook != null) {
+            Vec3 hookPos = AOTReflect.getPosition(leftHook);
+            if (hookPos != null && checkCollisionBetween(player, hookPos)) {
+                AOTReflect.release(leftHook);  // Break the hook
+                return;
+            }
+        }
+        
+        // Check right hook
+        if (rightHook != null) {
+            Vec3 hookPos = AOTReflect.getPosition(rightHook);
+            if (hookPos != null && checkCollisionBetween(player, hookPos)) {
+                AOTReflect.release(rightHook);  // Break the hook
+                return;
+            }
+        }
+    }
+
+    /**
+     * Raycast between player and hook, check if rope would hit a block.
+     * Returns true if collision detected (rope should break).
+     */
+    private static boolean checkCollisionBetween(LocalPlayer player, Vec3 targetPos) {
+        LocalPlayer p = Minecraft.getInstance().player;
+        if (p == null || p.level() == null) return false;
+        
+        Vec3 fromPos = p.position();
+        ClipContext context = new ClipContext(fromPos, targetPos,
+                ClipContext.Block.COLLIDER,
+                ClipContext.Fluid.NONE,
+                p);
+        
+        BlockHitResult hit = p.level().clip(context);
+        
+        // If raycast hit something → collision detected
+        return hit != null && hit.getBlockPos() != null;
     }
 }
