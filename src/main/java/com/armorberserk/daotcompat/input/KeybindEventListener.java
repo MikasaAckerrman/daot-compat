@@ -5,6 +5,7 @@ import com.armorberserk.daotcompat.physics.DEWImpulseCalculator;
 import com.armorberserk.daotcompat.render.SparkEffectRenderer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
@@ -46,6 +47,8 @@ public class KeybindEventListener {
             GasManager.consumeForDEW();
             Vec3 impulse = DEWImpulseCalculator.calculateDEW(player);
             player.setDeltaMovement(player.getDeltaMovement().add(impulse));
+            // 🔊 Play sound on DEW activation
+            player.playSound(SoundEvents.BLAZE_SHOOT, 0.6f, 0.9f + (float) Math.random() * 0.2f);
         }
         
         // Check for Reverse DEW (double-tap S)
@@ -53,6 +56,8 @@ public class KeybindEventListener {
             GasManager.consumeForReverseDEW();
             Vec3 impulse = DEWImpulseCalculator.calculateReverseDEW(player);
             player.setDeltaMovement(player.getDeltaMovement().add(impulse));
+            // 🔊 Play sound on Reverse DEW activation
+            player.playSound(SoundEvents.BLAZE_SHOOT, 0.6f, 1.1f + (float) Math.random() * 0.2f);
         }
     }
     

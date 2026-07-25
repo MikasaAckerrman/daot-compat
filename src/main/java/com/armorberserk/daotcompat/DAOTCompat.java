@@ -8,7 +8,6 @@ import com.armorberserk.daotcompat.aot.AOTReflect;
 import com.armorberserk.daotcompat.client.DAOTCompatKeyMappings;
 import com.armorberserk.daotcompat.collision.HighSpeedSubLevelGuard;
 import com.armorberserk.daotcompat.hook.HookTransformResolver;
-import com.armorberserk.daotcompat.hook.ReelControl;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
 import com.armorberserk.daotcompat.input.HotbarSwapHandler;
 import com.armorberserk.daotcompat.input.KeybindEventListener;
@@ -96,15 +95,11 @@ public final class DAOTCompat {
                 if (left != null) HookTransformResolver.process(player.level(), left);
                 if (right != null) HookTransformResolver.process(player.level(), right);
                 
-                // Phase 2: New rope physics controller (replaces old ReelControl logic)
+                // Phase 2: Rope physics with wrapping detection (v1.3.0)
                 GrapplePhysicsController.tick(player);
-                
-                // DISABLED (v1.2.0): ReelControl conflicts with new GrapplePhysicsController
-                // ReelControl.apply(player);  // OLD CODE - no longer needed
 
-                // Safety net against tunnelling through a sub-level (airship) at ODM speeds. Runs
-                // last so its velocity clamp isn't overwritten; a no-op away from ships / at slow
-                // speeds. See HighSpeedSubLevelGuard for the investigated root cause.
+                // Safety net against tunnelling through a sub-level (airship) at ODM speeds.
+                // Runs last so its velocity clamp isn't overwritten; a no-op away from ships.
                 HighSpeedSubLevelGuard.tick(player);
             });
         }

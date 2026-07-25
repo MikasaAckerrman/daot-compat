@@ -4,11 +4,14 @@ import com.armorberserk.daotcompat.aot.AOTReflect;
 import com.armorberserk.daotcompat.input.GrappleStateManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Phase 2 REWRITE (v1.2.0): Rope physics with collision detection.
@@ -17,11 +20,12 @@ import net.neoforged.api.distmarker.OnlyIn;
  * 1. Removed auto-grapple attraction (magnet effect)
  * 2. Added rope length constraint
  * 3. Added rope collision detection (Task 1.3)
+ * 4. Added rope wrapping around block edges (v1.3.0)
  * 
  * New Logic:
  * - Hooks create TENSION (constraint), not force
  * - Rope distance LIMITED to MAX_ROPE_LENGTH
- * - Rope collision with blocks → rope breaks
+ * - Rope WRAPS around block edges (segments)
  * - Player velocity PRESERVED (inertia)
  * - SPACE held → prepares pulling (no auto-pull yet)
  * 
@@ -42,12 +46,42 @@ public class GrapplePhysicsController {
     // Task 2.2: Current rope length (per hook engagement)
     private static double currentRopeLength = MAX_ROPE_LENGTH;
     
+    // Rope segment handlers (for wrapping detection) - per hook
+    private static final Map<Integer, RopeSegmentHandler> segmentHandlers = new HashMap<>();
+    
+    // Track hook states for sound effects
+    private static boolean prevLeftHookActive = false;
+    private static boolean prevRightHookActive = false;
+    
     public static void tick(LocalPlayer player) {
         Object leftHook = AOTReflect.getLeftHook();
         Object rightHook = AOTReflect.getRightHook();
         
         boolean hasLeft = leftHook != null;
         boolean hasRight = rightHook != null;
+        
+        // 🔊 SOUND EFFECTS FOR ROPE ENGAGEMENT
+        // Left hook zipped/unzipped
+        if (hasLeft && !prevLeftHookActive) {
+            // 🎯 Rope attached to surface
+            playRopeHookSound(player, true);
+            prevLeftHookActive = true;
+        } else if (!hasLeft && prevLeftHookActive) {
+            // ❌ Rope broke/released
+            playRopeBreakSound(player);
+            prevLeftHookActive = false;
+        }
+        
+        // Right hook zipped/unzipped
+        if (hasRight && !prevRightHookActive) {
+            // 🎯 Rope attached to surface
+            playRopeHookSound(player, false);
+            prevRightHookActive = true;
+        } else if (!hasRight && prevRightHookActive) {
+            // ❌ Rope broke/released
+            playRopeBreakSound(player);
+            prevRightHookActive = false;
+        }
         
         // No hooks → normal gravity, reset rope length
         if (!hasLeft && !hasRight) {
@@ -77,15 +111,37 @@ public class GrapplePhysicsController {
     }
     
     /**
-     * Apply rope length constraint.
-     * If player is beyond MAX_ROPE_LENGTH from hook, return them to the boundary.
+     * 🔊 Play sound when rope hooks/zips to surface.
+     * Different pitches for left vs right for stereo effect.
+     */
+    private static void playRopeHookSound(LocalPlayer player, boolean isLeftHook) {
+        if (player == null) return;
+        float pitch = isLeftHook ? 0.85f : 1.15f;  // Left lower, right higher
+        player.playSound(SoundEvents.TRIPWIRE_CLICK_ON, 0.7f, pitch);
+    }
+    
+    /**
+     * 🔊 Play sound when rope breaks/detaches from surface.
+     */
+    private static void playRopeBreakSound(LocalPlayer player) {
+        if (player == null) return;
+        player.playSound(SoundEvents.CHAIN_BREAK, 0.6f, 0.8f + (float) Math.random() * 0.4f);
+    }
+    
+    /**
+     * Apply rope length constraint with proper rope wrapping support.
+     * If player is beyond rope length from hook (accounting for wraps), constrain to sphere.
      * Preserves tangential velocity (pendulum effect).
      * Removes radial velocity (toward/away from hook).
+     * 
+     * UPDATED (v1.3.0): Uses RopeSegmentHandler for accurate rope length calculation
+     * when rope wraps around block edges.
      */
     private static void applyRopeConstraint(LocalPlayer player, Object leftHook, Object rightHook) {
         Vec3 playerPos = player.position();
         Vec3 closestHookPos = null;
         double minDistanceSqr = Double.MAX_VALUE;
+        Object closestHook = null;
         
         // Find closest hook
         if (leftHook != null) {
@@ -95,6 +151,7 @@ public class GrapplePhysicsController {
                 if (distSqr < minDistanceSqr) {
                     minDistanceSqr = distSqr;
                     closestHookPos = hookPos;
+                    closestHook = leftHook;
                 }
             }
         }
@@ -106,16 +163,28 @@ public class GrapplePhysicsController {
                 if (distSqr < minDistanceSqr) {
                     minDistanceSqr = distSqr;
                     closestHookPos = hookPos;
+                    closestHook = rightHook;
                 }
             }
         }
         
-        if (closestHookPos == null) return;
+        if (closestHookPos == null || player.level() == null) return;
         
-        double distance = Math.sqrt(minDistanceSqr);
+        // Update rope segment handler for wrapping detection
+        int hookId = closestHook != null ? closestHook.hashCode() : 0;
+        final Vec3 finalClosestHookPos = closestHookPos;  // Make effectively final for lambda
+        final Vec3 finalPlayerPos = playerPos;             // Make effectively final for lambda
+        RopeSegmentHandler handler = segmentHandlers.computeIfAbsent(hookId, 
+            k -> new RopeSegmentHandler(finalClosestHookPos, finalPlayerPos));
+        
+        // Update segments with current positions
+        handler.update(closestHookPos, playerPos, currentRopeLength, player.level());
+        
+        // Calculate actual rope distance (accounting for wraps)
+        double actualRopeDistance = calculateActualRopeDistance(handler, closestHookPos, playerPos);
         
         // If within current rope length → no constraint
-        if (distance <= currentRopeLength) {
+        if (actualRopeDistance <= currentRopeLength) {
             return;
         }
         
@@ -132,10 +201,34 @@ public class GrapplePhysicsController {
             player.setDeltaMovement(newVelocity);
         }
     }
+    
+    /**
+     * Calculate actual rope distance from hook to player, accounting for segment wraps.
+     * If rope wraps around block edges, distance = sum of all segment lengths.
+     * Otherwise, straight line distance.
+     */
+    private static double calculateActualRopeDistance(RopeSegmentHandler handler, Vec3 hookPos, Vec3 playerPos) {
+        // Get all segment points (includes wraps)
+        Vec3[] segments = handler.getSegments();
+        
+        if (segments.length < 2) {
+            // No segments or wraps - use straight line
+            return hookPos.distanceTo(playerPos);
+        }
+        
+        // Sum distances along all segments
+        double totalDistance = 0.0;
+        for (int i = 0; i < segments.length - 1; i++) {
+            totalDistance += segments[i].distanceTo(segments[i + 1]);
+        }
+        
+        return totalDistance;
+    }
 
     /**
      * Task 1.3: Check if rope collides with blocks.
      * If rope hits a block (not hook location), break the hook.
+     * 🔊 Plays break sound when rope snaps.
      */
     private static void checkRopeCollision(LocalPlayer player, Object leftHook, Object rightHook) {
         // Check left hook
@@ -143,6 +236,8 @@ public class GrapplePhysicsController {
             Vec3 hookPos = AOTReflect.getPosition(leftHook);
             if (hookPos != null && checkCollisionBetween(player, hookPos)) {
                 AOTReflect.release(leftHook);  // Break the hook
+                playRopeBreakSound(player);     // 🔊 Sound when rope snaps
+                prevLeftHookActive = false;
                 return;
             }
         }
@@ -152,6 +247,8 @@ public class GrapplePhysicsController {
             Vec3 hookPos = AOTReflect.getPosition(rightHook);
             if (hookPos != null && checkCollisionBetween(player, hookPos)) {
                 AOTReflect.release(rightHook);  // Break the hook
+                playRopeBreakSound(player);     // 🔊 Sound when rope snaps
+                prevRightHookActive = false;
                 return;
             }
         }
