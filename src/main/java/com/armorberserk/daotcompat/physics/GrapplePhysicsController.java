@@ -33,8 +33,14 @@ import net.neoforged.api.distmarker.OnlyIn;
 public class GrapplePhysicsController {
     
     private static final double MAX_ROPE_LENGTH = 48.0;  // blocks
+    private static final double MIN_ROPE_LENGTH = 2.0;   // blocks (can't pull closer than this)
+    private static final double REEL_SPEED = 0.4;        // blocks per tick when pulling
+    private static final double RELEASE_SPEED = 0.2;     // blocks per tick when releasing
     private static final double DESCEND_SPEED = 0.10;
     private static final double MIN_HOOK_RADIUS_SQR = 4.0;
+    
+    // Task 2.2: Current rope length (per hook engagement)
+    private static double currentRopeLength = MAX_ROPE_LENGTH;
     
     public static void tick(LocalPlayer player) {
         Object leftHook = AOTReflect.getLeftHook();
@@ -43,24 +49,31 @@ public class GrapplePhysicsController {
         boolean hasLeft = leftHook != null;
         boolean hasRight = rightHook != null;
         
-        // No hooks → normal gravity
-        if (!hasLeft && !hasRight) return;
+        // No hooks → normal gravity, reset rope length
+        if (!hasLeft && !hasRight) {
+            currentRopeLength = MAX_ROPE_LENGTH;
+            return;
+        }
         
-        // Task 1.3: Check rope collision (raycast from hook to player)
+        // Task 2.2: Handle SPACE (pulling) and SHIFT (releasing)
+        if (GrappleStateManager.isPullingRope()) {
+            // SPACE held → Shorten rope (pull toward hook)
+            currentRopeLength = Math.max(MIN_ROPE_LENGTH, currentRopeLength - REEL_SPEED);
+        } else if (GrappleStateManager.isDescending()) {
+            // SHIFT held → Lengthen rope (release)
+            currentRopeLength = Math.min(MAX_ROPE_LENGTH, currentRopeLength + RELEASE_SPEED);
+        } else {
+            // Neither held → Gradually restore to max (slack)
+            if (currentRopeLength < MAX_ROPE_LENGTH) {
+                currentRopeLength = Math.min(MAX_ROPE_LENGTH, currentRopeLength + RELEASE_SPEED * 0.5);
+            }
+        }
+        
+        // Check rope collision
         checkRopeCollision(player, leftHook, rightHook);
         
-        // Apply rope constraint (limit distance)
+        // Apply rope constraint with current rope length
         applyRopeConstraint(player, leftHook, rightHook);
-        
-        // SPACE held → prepare pulling (no auto-velocity)
-        if (GrappleStateManager.isPullingRope()) {
-            // TODO (Task 2.2): Implement rope shortening here
-        }
-        
-        // SHIFT held → controlled descent
-        if (GrappleStateManager.isDescending()) {
-            player.setDeltaMovement(player.getDeltaMovement().add(0, -DESCEND_SPEED, 0));
-        }
     }
     
     /**
@@ -101,14 +114,14 @@ public class GrapplePhysicsController {
         
         double distance = Math.sqrt(minDistanceSqr);
         
-        // If within rope length → no constraint
-        if (distance <= MAX_ROPE_LENGTH) {
+        // If within current rope length → no constraint
+        if (distance <= currentRopeLength) {
             return;
         }
         
         // Beyond rope length → constrain to sphere surface
         Vec3 towardHook = closestHookPos.subtract(playerPos).normalize();
-        Vec3 constrainedPos = closestHookPos.subtract(towardHook.scale(MAX_ROPE_LENGTH));
+        Vec3 constrainedPos = closestHookPos.subtract(towardHook.scale(currentRopeLength));
         player.setPos(constrainedPos.x, constrainedPos.y, constrainedPos.z);
         
         // Remove radial velocity component (velocity toward/away from hook)
