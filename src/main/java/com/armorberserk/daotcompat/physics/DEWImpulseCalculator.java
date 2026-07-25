@@ -1,69 +1,115 @@
 package com.armorberserk.daotcompat.physics;
 
 import com.armorberserk.daotcompat.aot.AOTReflect;
+import com.armorberserk.daotcompat.gas.GasManager;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
 /**
- * DEW impulse calculation.
- * Base impulse = look direction + 15° up + velocity momentum
- * Multipliers: rope (1.0-2.3x), altitude (0.85x ground), speed (+0.2-0.4x)
+ * Task 2.1 REWRITE (v1.3.0): DEW impulse properly adds to velocity.
+ *
+ * CRITICAL FIX: DEW now ADDS impulse to current velocity, not replaces it.
+ * This preserves momentum and creates smooth, predictable acceleration.
+ *
+ * Physics:
+ * - Current velocity is preserved
+ * - DEW adds directional impulse in look direction
+ * - Upward tilt creates natural arc
+ * - Rope multiplier increases strength when engaged
+ * - Speed multiplier adapts to current velocity
  */
 @OnlyIn(Dist.CLIENT)
 public class DEWImpulseCalculator {
     
-    private static final float BASE_IMPULSE = 2.5f;
-    private static final float UPWARD_TILT = 17.5f * (float) Math.PI / 180.0f;
+    private static final double BASE_IMPULSE = 0.12;  // Smaller base, multipliers do the work
+    private static final double UPWARD_TILT = 15.0 * Math.PI / 180.0;  // 15 degrees up
     
+    /**
+     * Calculate DEW forward impulse.
+     * Adds momentum to current velocity in the look direction.
+     */
     public static Vec3 calculateDEW(LocalPlayer player) {
+        Vec3 currentVel = player.getDeltaMovement();
         Vec3 lookDir = player.getLookAngle();
         
-        // Add upward tilt
+        // Apply upward tilt to look direction
+        double horizontalLength = Math.sqrt(lookDir.x * lookDir.x + lookDir.z * lookDir.z);
         Vec3 tiltedDir = new Vec3(
             lookDir.x,
-            lookDir.y + Math.sin(UPWARD_TILT),
+            lookDir.y + Math.sin(UPWARD_TILT) * 0.5,  // Moderate upward component
             lookDir.z
         ).normalize();
         
-        // Add momentum (preserve current velocity)
-        Vec3 currentVel = player.getDeltaMovement();
-        Vec3 impulseDir = tiltedDir.scale(0.8).add(currentVel.normalize().scale(0.2));
+        // Calculate base impulse strength
+        double gasPercentage = GasManager.getGasPercent() / 100.0;  // 0-1
+        double ropeMultiplier = calculateRopeMultiplier(player);
+        double speedMultiplier = 1.0 + (currentVel.length() / 20.0) * 0.4;  // Higher speed = stronger impulse
+        double altitudeBonus = player.onGround() ? 0.9 : 1.1;  // Bonus in air, penalty on ground
         
-        // Calculate multipliers
-        float ropeMultiplier = calculateRopeMultiplier(player);
-        float altitudeMultiplier = player.onGround() ? 0.85f : 1.0f;
-        float speedMultiplier = 1.0f + (float)(currentVel.horizontalDistance() / 20.0) * 0.3f;
+        double strength = BASE_IMPULSE * gasPercentage * ropeMultiplier * speedMultiplier * altitudeBonus;
         
-        float strength = BASE_IMPULSE * ropeMultiplier * altitudeMultiplier * speedMultiplier;
-        
-        return impulseDir.normalize().scale(strength);
+        // Return impulse vector (will be added to current velocity)
+        return tiltedDir.scale(strength);
     }
     
+    /**
+     * Calculate DEW reverse impulse (backward + slightly down).
+     * Used for controlled backward movement / braking.
+     */
     public static Vec3 calculateReverseDEW(LocalPlayer player) {
-        Vec3 impulse = calculateDEW(player);
-        return impulse.scale(-0.85f);  // Reverse direction, 85% strength
+        Vec3 currentVel = player.getDeltaMovement();
+        Vec3 lookDir = player.getLookAngle();
+        
+        // Reverse direction (180 degrees)
+        Vec3 reverseLook = lookDir.scale(-1.0);
+        
+        // Add downward tilt for control
+        Vec3 tiltedDir = new Vec3(
+            reverseLook.x,
+            reverseLook.y - Math.sin(UPWARD_TILT) * 0.3,  // Slight downward
+            reverseLook.z
+        ).normalize();
+        
+        // Reverse DEW is slightly weaker (80% strength)
+        double gasPercentage = GasManager.getGasPercent() / 100.0;
+        double ropeMultiplier = calculateRopeMultiplier(player);
+        double speedMultiplier = 1.0 + (currentVel.length() / 25.0) * 0.3;
+        double altitudeBonus = player.onGround() ? 0.85 : 1.0;
+        
+        double strength = BASE_IMPULSE * 0.85 * gasPercentage * ropeMultiplier * speedMultiplier * altitudeBonus;
+        
+        return tiltedDir.scale(strength);
     }
     
-    private static float calculateRopeMultiplier(LocalPlayer player) {
+    /**
+     * Calculate rope engagement multiplier.
+     * Grapple hooks provide mechanical advantage.
+     * 1 hook = 1.6x, 2 hooks = 2.3x
+     */
+    private static double calculateRopeMultiplier(LocalPlayer player) {
         Object left = AOTReflect.getLeftHook();
         Object right = AOTReflect.getRightHook();
         
-        if (left == null && right == null) return 1.0f;
-        
-        // Simple: if hooks active, boost multiplier
         int hooksActive = 0;
+        
         if (left != null) {
             Vec3 pos = AOTReflect.getPosition(left);
-            if (pos != null) hooksActive++;
-        }
-        if (right != null) {
-            Vec3 pos = AOTReflect.getPosition(right);
-            if (pos != null) hooksActive++;
+            if (pos != null && pos.distanceToSqr(player.position()) < 48.0 * 48.0) {
+                hooksActive++;
+            }
         }
         
-        if (hooksActive == 0) return 1.0f;
-        return 1.0f + (hooksActive * 0.65f);  // 1.65x for 1 hook, 2.3x for 2 hooks
+        if (right != null) {
+            Vec3 pos = AOTReflect.getPosition(right);
+            if (pos != null && pos.distanceToSqr(player.position()) < 48.0 * 48.0) {
+                hooksActive++;
+            }
+        }
+        
+        if (hooksActive == 0) return 1.0;
+        if (hooksActive == 1) return 1.6;
+        return 2.3;  // Both hooks active
     }
 }
