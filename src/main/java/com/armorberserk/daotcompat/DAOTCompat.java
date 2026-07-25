@@ -90,16 +90,19 @@ public final class DAOTCompat {
                 LocalPlayer player = Minecraft.getInstance().player;
                 if (player == null) return;
                 RemoteHookFollower.tick(player.level());
-                Object left = AOTReflect.getLeftHook();
-                Object right = AOTReflect.getRightHook();
-                if (left != null) HookTransformResolver.process(player.level(), left);
-                if (right != null) HookTransformResolver.process(player.level(), right);
                 
-                // Phase 2: Rope physics with wrapping detection (v1.3.0)
-                GrapplePhysicsController.tick(player);
+                // 🔧 OPTIMIZATION (v1.3.0): Cache AOTReflect calls (expensive reflection)
+                // Instead of calling 5+ times per frame, call ONCE and pass as parameter
+                Object leftHook = AOTReflect.getLeftHook();
+                Object rightHook = AOTReflect.getRightHook();
+                
+                if (leftHook != null) HookTransformResolver.process(player.level(), leftHook);
+                if (rightHook != null) HookTransformResolver.process(player.level(), rightHook);
+                
+                // Pass cached hooks to physics controller (avoids multiple reflection calls)
+                GrapplePhysicsController.tick(player, leftHook, rightHook);
 
                 // Safety net against tunnelling through a sub-level (airship) at ODM speeds.
-                // Runs last so its velocity clamp isn't overwritten; a no-op away from ships.
                 HighSpeedSubLevelGuard.tick(player);
             });
         }

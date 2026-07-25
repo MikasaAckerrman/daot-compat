@@ -53,9 +53,9 @@ public class GrapplePhysicsController {
     private static boolean prevLeftHookActive = false;
     private static boolean prevRightHookActive = false;
     
-    public static void tick(LocalPlayer player) {
-        Object leftHook = AOTReflect.getLeftHook();
-        Object rightHook = AOTReflect.getRightHook();
+    public static void tick(LocalPlayer player, Object leftHook, Object rightHook) {
+        // Hook objects passed as parameters (cached from DAOTCompat)
+        // Avoids expensive AOTReflect calls here
         
         boolean hasLeft = leftHook != null;
         boolean hasRight = rightHook != null;
