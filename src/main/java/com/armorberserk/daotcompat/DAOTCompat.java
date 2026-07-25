@@ -14,6 +14,7 @@ import com.armorberserk.daotcompat.input.KeybindEventListener;
 import com.armorberserk.daotcompat.input.KeybindRegistrationListener;
 import com.armorberserk.daotcompat.physics.GrapplePhysicsController;
 import com.armorberserk.daotcompat.render.RopeLineRenderer;
+import com.armorberserk.daotcompat.render.RopeWrapParticles;
 import com.armorberserk.daotcompat.render.SparkEffectRenderer;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import net.minecraft.client.Minecraft;
@@ -79,6 +80,9 @@ public final class DAOTCompat {
             
             // Phase 3+: Rope rendering (RenderEvent = FORGE event)
             NeoForge.EVENT_BUS.register(RopeLineRenderer.class);
+            
+            // Phase 3+: Rope wrap particle effects (ClientTickEvent = FORGE event)
+            NeoForge.EVENT_BUS.register(RopeWrapParticles.class);
             
             // Phase 4B: Spark effects (RenderEvent = FORGE event)
             NeoForge.EVENT_BUS.register(SparkEffectRenderer.class);
