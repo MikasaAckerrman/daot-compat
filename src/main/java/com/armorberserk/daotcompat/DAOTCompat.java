@@ -13,6 +13,7 @@ import com.armorberserk.daotcompat.hook.RemoteHookFollower;
 import com.armorberserk.daotcompat.input.HotbarSwapHandler;
 import com.armorberserk.daotcompat.input.KeybindEventListener;
 import com.armorberserk.daotcompat.physics.GrapplePhysicsController;
+import com.armorberserk.daotcompat.render.RopeLineRenderer;
 import com.armorberserk.daotcompat.render.SparkEffectRenderer;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import net.minecraft.client.Minecraft;
@@ -71,6 +72,9 @@ public final class DAOTCompat {
             
             // Register Phase 1 keybinds (PULL_ROPE, ACCELERATE, DESCEND_ROPE, SWAP_HOTBAR, REVERSE_DEW)
             modBus.register(KeybindEventListener.class);
+            
+            // Register Phase 3+ rope rendering (with Sable wrapping support)
+            modBus.register(RopeLineRenderer.class);
             
             // Register Phase 4B spark effects
             modBus.register(SparkEffectRenderer.class);
