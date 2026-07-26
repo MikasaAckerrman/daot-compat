@@ -23,12 +23,16 @@ import net.neoforged.api.distmarker.OnlyIn;
 @OnlyIn(Dist.CLIENT)
 public class DEWImpulseCalculator {
     
-    private static final double BASE_IMPULSE = 0.12;  // Smaller base, multipliers do the work
+    private static final double BASE_IMPULSE = 0.18;  // [FIX v1.3.5] increased from 0.12 (1.5x stronger)
     private static final double UPWARD_TILT = 15.0 * Math.PI / 180.0;  // 15 degrees up
+    private static final double MAX_VELOCITY = 2.8;  // blocks per tick [FIX v1.3.5: prevent unbounded acceleration]
     
     /**
      * Calculate DEW forward impulse.
      * Adds momentum to current velocity in the look direction.
+     * 
+     * [FIX v1.3.5] Added velocity cap to prevent unbounded acceleration.
+     * Calculates what impulse would be, then clamps result to MAX_VELOCITY.
      */
     public static Vec3 calculateDEW(LocalPlayer player) {
         Vec3 currentVel = player.getDeltaMovement();
@@ -50,8 +54,20 @@ public class DEWImpulseCalculator {
         
         double strength = BASE_IMPULSE * gasPercentage * ropeMultiplier * speedMultiplier * altitudeBonus;
         
+        // [FIX v1.3.5] Apply velocity cap after calculating impulse
+        // This prevents unbounded acceleration while preserving momentum direction
+        Vec3 impulse = tiltedDir.scale(strength);
+        Vec3 newVelocity = currentVel.add(impulse);
+        double newSpeed = newVelocity.length();
+        
+        if (newSpeed > MAX_VELOCITY) {
+            // Clamp to MAX_VELOCITY while preserving direction
+            Vec3 clampedVel = newVelocity.normalize().scale(MAX_VELOCITY);
+            return clampedVel.subtract(currentVel);  // Return the clamped impulse
+        }
+        
         // Return impulse vector (will be added to current velocity)
-        return tiltedDir.scale(strength);
+        return impulse;
     }
     
     /**
@@ -78,9 +94,19 @@ public class DEWImpulseCalculator {
         double speedMultiplier = 1.0 + (currentVel.length() / 25.0) * 0.3;
         double altitudeBonus = player.onGround() ? 0.85 : 1.0;
         
-        double strength = BASE_IMPULSE * 0.85 * gasPercentage * ropeMultiplier * speedMultiplier * altitudeBonus;
+        double strength = BASE_IMPULSE * 1.0 * gasPercentage * ropeMultiplier * speedMultiplier * altitudeBonus;
         
-        return tiltedDir.scale(strength);
+        // [FIX v1.3.5] Apply velocity cap for Reverse DEW (same logic as forward)
+        Vec3 impulse = tiltedDir.scale(strength);
+        Vec3 newVelocity = currentVel.add(impulse);
+        double newSpeed = newVelocity.length();
+        
+        if (newSpeed > MAX_VELOCITY) {
+            Vec3 clampedVel = newVelocity.normalize().scale(MAX_VELOCITY);
+            return clampedVel.subtract(currentVel);
+        }
+        
+        return impulse;
     }
     
     /**

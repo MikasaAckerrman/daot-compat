@@ -1,5 +1,6 @@
 package com.armorberserk.daotcompat.input;
 
+import com.armorberserk.daotcompat.DAOTCompat;
 import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
@@ -84,6 +85,8 @@ public class DoubleTapDetector {
                 // Within window - double-tap detected!
                 lastSPressTime = -1;
                 sPressTicks = 0;
+                // [FIX v1.3.5] Debug reverse DEW detection
+                DAOTCompat.LOGGER.debug("[dew] Reverse DEW (S) double-tap detected");
                 return true;
             }
             // Not within window - record this as first press

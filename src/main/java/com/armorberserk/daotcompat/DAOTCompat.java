@@ -97,16 +97,21 @@ public final class DAOTCompat {
             NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (ClientTickEvent.Post event) -> {
                 LocalPlayer player = Minecraft.getInstance().player;
                 if (player == null) return;
+                
+                // [FIX v1.3.5] Ensure correct order of execution:
+                // 1. Update hook positions for moving sub-levels (LOWEST = after all others)
                 RemoteHookFollower.tick(player.level());
                 
-                // 🔧 OPTIMIZATION (v1.3.0): Cache AOTReflect calls (expensive reflection)
+                // 2. 🔧 OPTIMIZATION (v1.3.0): Cache AOTReflect calls (expensive reflection)
                 // Instead of calling 5+ times per frame, call ONCE and pass as parameter
                 Object leftHook = AOTReflect.getLeftHook();
                 Object rightHook = AOTReflect.getRightHook();
                 
+                // 3. Transform coordinates for each hook (project through Sable pose)
                 if (leftHook != null) HookTransformResolver.process(player.level(), leftHook);
                 if (rightHook != null) HookTransformResolver.process(player.level(), rightHook);
                 
+                // 4. Apply rope physics with updated positions
                 // Pass cached hooks to physics controller (avoids multiple reflection calls)
                 GrapplePhysicsController.tick(player, leftHook, rightHook);
 

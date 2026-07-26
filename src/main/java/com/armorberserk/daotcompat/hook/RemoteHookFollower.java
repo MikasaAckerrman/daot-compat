@@ -134,6 +134,8 @@ public final class RemoteHookFollower {
                     }
                 }
             }
+            // [FIX v1.3.5] Always store result - either found SubLevel or NULL (clears stale anchor)
+            // This prevents infinite resync loop when SubLevel becomes temporarily unreachable
             store(anchor, left, sub, local, cur, sub != null ? level.dimension() : null);
         }
 

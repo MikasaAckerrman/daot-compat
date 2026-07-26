@@ -1,5 +1,6 @@
 package com.armorberserk.daotcompat.input;
 
+import com.armorberserk.daotcompat.DAOTCompat;
 import com.armorberserk.daotcompat.gas.GasManager;
 import com.armorberserk.daotcompat.physics.DEWImpulseCalculator;
 import net.minecraft.client.Minecraft;
@@ -56,6 +57,8 @@ public class KeybindEventListener {
             player.setDeltaMovement(player.getDeltaMovement().add(impulse));
             // 🔊 Play sound on DEW activation
             player.playSound(SoundEvents.BLAZE_SHOOT, 0.6f, 0.9f + (float) Math.random() * 0.2f);
+            // [FIX v1.3.5] Log DEW activation for debugging
+            DAOTCompat.LOGGER.debug("[dew] DEW forward activated");
         }
         
         // Check for Reverse DEW (double-tap S)
@@ -65,6 +68,8 @@ public class KeybindEventListener {
             player.setDeltaMovement(player.getDeltaMovement().add(impulse));
             // 🔊 Play sound on Reverse DEW activation
             player.playSound(SoundEvents.BLAZE_SHOOT, 0.6f, 1.1f + (float) Math.random() * 0.2f);
+            // [FIX v1.3.5] Log Reverse DEW activation
+            DAOTCompat.LOGGER.debug("[dew] DEW reverse activated");
         }
     }
 }

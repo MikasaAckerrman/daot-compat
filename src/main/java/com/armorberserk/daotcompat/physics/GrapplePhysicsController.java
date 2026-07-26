@@ -1,5 +1,6 @@
 package com.armorberserk.daotcompat.physics;
 
+import com.armorberserk.daotcompat.DAOTCompat;
 import com.armorberserk.daotcompat.aot.AOTReflect;
 import com.armorberserk.daotcompat.input.GrappleStateManager;
 import net.minecraft.client.Minecraft;
@@ -106,19 +107,22 @@ public class GrapplePhysicsController {
             return;
         }
         
-        // Task 2.2: Handle SPACE (pulling) and SHIFT (releasing)
+        // Task 2.2: Handle SPACE (pulling) and SHIFT (releasing) [FIX v1.3.5]
         if (GrappleStateManager.isPullingRope()) {
             // SPACE held → Shorten rope (pull toward hook)
+            double oldLength = currentRopeLength;
             currentRopeLength = Math.max(MIN_ROPE_LENGTH, currentRopeLength - REEL_SPEED);
+            DAOTCompat.LOGGER.debug("[rope] pulling: {} → {}", String.format("%.1f", oldLength), 
+                    String.format("%.1f", currentRopeLength));
         } else if (GrappleStateManager.isDescending()) {
-            // SHIFT held → Lengthen rope (release)
+            // SHIFT held → Lengthen rope (release) [FIX v1.3.5]
+            double oldLength = currentRopeLength;
             currentRopeLength = Math.min(MAX_ROPE_LENGTH, currentRopeLength + RELEASE_SPEED);
-        } else {
-            // Neither held → Gradually restore to max (slack)
-            if (currentRopeLength < MAX_ROPE_LENGTH) {
-                currentRopeLength = Math.min(MAX_ROPE_LENGTH, currentRopeLength + RELEASE_SPEED * 0.5);
-            }
+            DAOTCompat.LOGGER.debug("[rope] releasing: {} → {}", String.format("%.1f", oldLength),
+                    String.format("%.1f", currentRopeLength));
         }
+        // [FIX v1.3.5] Removed automatic restore to MAX - rope stays at current length when neither SPACE nor SHIFT held
+        // This prevents unwanted descent after releasing SPACE
         
         // Check rope collision
         checkRopeCollision(player, leftHook, rightHook);
@@ -153,6 +157,9 @@ public class GrapplePhysicsController {
      * - Both hooks apply constraint simultaneously when both active
      * - Angle limitation to prevent extreme rope angles
      * - Average constraint when both hooks active
+     * 
+     * [FIX v1.3.5] Improved release lag handling:
+     * If no hooks are active, clear constraints immediately (no slow fall)
      */
     private static void applyRopeConstraint(LocalPlayer player, Object leftHook, Object rightHook) {
         Vec3 playerPos = player.position();
@@ -199,6 +206,7 @@ public class GrapplePhysicsController {
             k -> new RopeSegmentHandler(finalHookPos, finalPlayerPos));
         
         handler.update(hookPos, playerPos, currentRopeLength, level);
+        SableRopeIntegration.syncHandler(hookId, handler);  // [FIX v1.3.5] Sync rendering with physics
         double actualRopeDistance = calculateActualRopeDistance(handler, hookPos, playerPos);
         
         // If within rope length, no constraint needed

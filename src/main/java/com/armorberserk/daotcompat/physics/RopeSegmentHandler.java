@@ -87,6 +87,10 @@ public class RopeSegmentHandler {
     /**
      * Update rope configuration based on current positions and rope length.
      * This is the main method called each tick.
+     * 
+     * [FIX v1.3.5] Handle physics object coordinates properly
+     * On moving sub-levels, coordinates are already in world space after transformation
+     * by HookTransformResolver, so RopeSegmentHandler works with correct world-space coordinates.
      */
     public void update(Vec3 hookPos, Vec3 playerPos, double ropeLen, Level level) {
         if (prevHookPos == null) {

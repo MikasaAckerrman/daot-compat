@@ -173,6 +173,20 @@ public class SableRopeIntegration {
     }
     
     /**
+     * Synchronize segment handler from physics system (GrapplePhysicsController).
+     * Called after handler.update() to ensure physics and rendering use same data.
+     * 
+     * [FIX v1.3.5] Fix rope wrapping synchronization
+     * GrapplePhysicsController updates its own handler, we need to sync it
+     * so RopeLineRenderer gets the same segment data for correct visualization.
+     */
+    public static void syncHandler(int hookId, RopeSegmentHandler handler) {
+        if (handler != null) {
+            segmentHandlers.put(hookId, handler);
+        }
+    }
+    
+    /**
      * Interpolate smooth rope points from segment corners.
      * Takes the discrete segment points and creates a smooth curve.
      */
