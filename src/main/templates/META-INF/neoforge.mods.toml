@@ -1,0 +1,53 @@
+modLoader="javafml"
+loaderVersion="${loader_version_range}"
+license="MIT"
+issueTrackerURL="https://github.com/MikasaAckerrman/daot-compat/issues"
+
+[[mods]]
+modId="${mod_id}"
+version="${mod_version}"
+displayName="${mod_name}"
+authors="${mod_authors}"
+description='''${mod_description}'''
+
+[[mixins]]
+config="${mod_id}.mixins.json"
+
+# Hard dep: Sable + AOT (compat is meaningless without both)
+[[dependencies.${mod_id}]]
+modId="neoforge"
+type="required"
+versionRange="${neo_version_range}"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.${mod_id}]]
+modId="minecraft"
+type="required"
+versionRange="${minecraft_version_range}"
+ordering="NONE"
+side="BOTH"
+
+# Sable: required (provides SubLevel API)
+[[dependencies.${mod_id}]]
+modId="sable"
+type="required"
+versionRange="[1.2.2,)"
+ordering="AFTER"
+side="BOTH"
+
+# Danny's AOT: required (provides HookPoint / ODMTickHandler) — loaded via Sinytra Connector
+[[dependencies.${mod_id}]]
+modId="dannys-aot"
+type="required"
+versionRange="[2.1.0,)"
+ordering="AFTER"
+side="BOTH"
+
+# Create Aeronautics: optional (uses Sable under the hood; compat works for any Sable user)
+[[dependencies.${mod_id}]]
+modId="create_aeronautics"
+type="optional"
+versionRange="[1.2.1,)"
+ordering="AFTER"
+side="BOTH"
