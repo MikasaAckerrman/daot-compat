@@ -86,14 +86,16 @@ public final class DAOTCompat {
                     RagdollClient.releaseRopes();
                 }
 
-                // Vanilla hint says "Shift: Get Up" — make Shift work mid-air too while a
-                // ragdoll we triggered is plausibly still running.
-                if (RagdollClient.isRagdollRecent() && Minecraft.getInstance().options.keyShift.isDown()) {
-                    RagdollClient.exit();
+                // While actually ragdolled (live check): Shift exits mid-air, the looping ODM
+                // gear sound is suppressed every tick (AOT restarts it while hooks are held),
+                // and the ragdoll camera follows the player's current F5 perspective.
+                if (RagdollClient.isRagdolledLive()) {
+                    if (Minecraft.getInstance().options.keyShift.isDown()) {
+                        RagdollClient.exit();
+                    }
+                    RagdollClient.stopOdmSounds();
+                    RagdollCameraSync.sync();
                 }
-
-                // Ragdoll camera follows the player's current F5 perspective.
-                RagdollCameraSync.sync();
             });
         }
 

@@ -22,10 +22,25 @@ import net.neoforged.neoforge.network.PacketDistributor;
 public final class RagdollClient {
 
     private static final boolean AVAILABLE = detect();
+    private static final boolean PATCH_AVAILABLE;
+    private static final java.lang.reflect.Method PATCH_IS_RAGDOLLED;
     private static volatile long stunUntilMs;
     // Window during which the local player is expected to be in a ragdoll we launched.
     // Used for: auto-exit on re-hook, Shift-in-air exit, camera mode syncing.
     private static volatile long ragdollUntilMs;
+
+    static {
+        boolean patch = false;
+        java.lang.reflect.Method m = null;
+        try {
+            Class<?> state = Class.forName("twtlinmiao.sableplayerragdollpatch.RagdollPlayerState");
+            m = state.getMethod("isRagdolled", net.minecraft.world.entity.player.Player.class);
+            patch = true;
+        } catch (Throwable ignored) {
+        }
+        PATCH_AVAILABLE = patch;
+        PATCH_IS_RAGDOLLED = m;
+    }
 
     private RagdollClient() {}
 
@@ -43,12 +58,30 @@ public final class RagdollClient {
         return AVAILABLE && DaotConfig.RAGDOLL_ENABLED.get();
     }
 
+    /**
+     * LIVE check "is the local player ragdolled right now", via the patch mod's client-safe
+     * {@code RagdollPlayerState.isRagdolled(Player)}. Falls back to the 30s trigger window when
+     * the patch is absent. This is what gates auto-exit-on-re-hook, Shift-in-air exit and the
+     * sound suppression — none of them should silently expire after 30 seconds.
+     */
+    public static boolean isRagdolledLive() {
+        LocalPlayer player = DAOTCompat.minecraft().player;
+        if (player == null) return false;
+        if (PATCH_AVAILABLE && PATCH_IS_RAGDOLLED != null) {
+            try {
+                return (boolean) PATCH_IS_RAGDOLLED.invoke(null, player);
+            } catch (Throwable ignored) {
+            }
+        }
+        return isRagdollRecent();
+    }
+
     /** True while a locally-requested stun window is still open (mirrors the server window). */
     public static boolean isStunned() {
         return System.currentTimeMillis() < stunUntilMs;
     }
 
-    /** True while a ragdoll we triggered is plausibly still active (30s window, cleared on exit). */
+    /** True while a ragdoll we triggered is plausibly still active (fallback for the live check). */
     public static boolean isRagdollRecent() {
         return System.currentTimeMillis() < ragdollUntilMs;
     }
@@ -83,14 +116,23 @@ public final class RagdollClient {
     /**
      * AOT plays looping ODM sounds (rope tension, gas) while its ODMTickHandler thinks the gear
      * is active; the player seated on a ragdoll still counts as hooked, so the loop drones on.
-     * Kill the looped instances reflectively — re-hooking restarts them naturally.
+     * Kill the looped instances reflectively — re-hooking restarts them naturally. Called every
+     * client tick while the player is ragdolled (method cached after first probe).
      */
-    private static void stopOdmSounds() {
+    private static volatile boolean soundMethodProbed;
+    private static java.lang.reflect.Method stopAllSoundsMethod;
+
+    public static void stopOdmSounds() {
         try {
-            Class<?> mgr = Class.forName("daot.ODMSoundManager");
-            java.lang.reflect.Method m = mgr.getMethod("stopAllSounds");
-            m.setAccessible(true);
-            m.invoke(null);
+            if (!soundMethodProbed) {
+                soundMethodProbed = true;
+                Class<?> mgr = Class.forName("daot.ODMSoundManager");
+                stopAllSoundsMethod = mgr.getMethod("stopAllSounds");
+            }
+            if (stopAllSoundsMethod != null) {
+                stopAllSoundsMethod.setAccessible(true);
+                stopAllSoundsMethod.invoke(null);
+            }
         } catch (Throwable ignored) {
         }
     }

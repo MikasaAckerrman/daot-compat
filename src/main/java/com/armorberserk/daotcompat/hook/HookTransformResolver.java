@@ -98,9 +98,9 @@ public final class HookTransformResolver {
             }
             if (notFinite(local)) return;
             DynamicHookMap.put(hook, new DynamicHookData(id, local, level.dimension()));
-            // Re-hooking in mid-air while a ragdoll we triggered is running ends it: the rope
-            // caught something solid, so the player is back in control.
-            if (RagdollClient.isRagdollRecent()) {
+            // Re-hooking in mid-air while ragdolled ends it: the rope caught something solid,
+            // so the player is back in control. Live check — works even 10 minutes into a ragdoll.
+            if (RagdollClient.isRagdolledLive()) {
                 RagdollClient.clearRagdollWindow();
                 RagdollClient.exit();
                 DAOTCompat.LOGGER.info("[hook] re-hooked in air while ragdolled -> exiting ragdoll");
