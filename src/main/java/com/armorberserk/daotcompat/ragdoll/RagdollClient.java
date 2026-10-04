@@ -114,24 +114,38 @@ public final class RagdollClient {
     }
 
     /**
-     * AOT plays looping ODM sounds (rope tension, gas) while its ODMTickHandler thinks the gear
-     * is active; the player seated on a ragdoll still counts as hooked, so the loop drones on.
-     * Kill the looped instances reflectively — re-hooking restarts them naturally. Called every
-     * client tick while the player is ragdolled (method cached after first probe).
+     * AOT plays looping ODM sounds (rope tension, gas, flight) while its ODMTickHandler thinks
+     * the gear is active; the player seated on a ragdoll still counts as hooked, so the loop
+     * drones on. Kill the looped instances reflectively — re-hooking restarts them naturally.
+     * Called every client tick while the player is ragdolled (method cached after first probe).
+     *
+     * <p>ВНИМАНИЕ (root cause of the v1.2.0 sound bug): {@code stopAllSounds} is NOT
+     * argumentless — its real signature is {@code stopAllSounds(LocalPlayer)} (Yarn
+     * {@code class_746} in the AOT jar). Calling {@code invoke(null)} threw
+     * IllegalArgumentException, which the old catch swallowed silently.
      */
     private static volatile boolean soundMethodProbed;
     private static java.lang.reflect.Method stopAllSoundsMethod;
 
     public static void stopOdmSounds() {
+        LocalPlayer player = DAOTCompat.minecraft().player;
+        if (player == null) return;
         try {
             if (!soundMethodProbed) {
                 soundMethodProbed = true;
                 Class<?> mgr = Class.forName("daot.ODMSoundManager");
-                stopAllSoundsMethod = mgr.getMethod("stopAllSounds");
+                // Ищем по имени + совместимости параметра: в AOT-джарке параметр объявлен как
+                // Yarn class_746 (= LocalPlayer), через Connector в рантайме это mojmap-класс.
+                for (java.lang.reflect.Method m : mgr.getDeclaredMethods()) {
+                    if (!"stopAllSounds".equals(m.getName()) || m.getParameterCount() != 1) continue;
+                    if (!m.getParameterTypes()[0].isAssignableFrom(player.getClass())) continue;
+                    m.setAccessible(true);
+                    stopAllSoundsMethod = m;
+                    break;
+                }
             }
             if (stopAllSoundsMethod != null) {
-                stopAllSoundsMethod.setAccessible(true);
-                stopAllSoundsMethod.invoke(null);
+                stopAllSoundsMethod.invoke(null, player);
             }
         } catch (Throwable ignored) {
         }

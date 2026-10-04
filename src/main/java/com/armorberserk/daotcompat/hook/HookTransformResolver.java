@@ -51,6 +51,10 @@ public final class HookTransformResolver {
     private static final Set<Object> RAGDOLLED_HOOKS =
             Collections.newSetFromMap(Collections.synchronizedMap(new WeakHashMap<>()));
 
+    // Hooks created while the player was ragdolled (one-shot diagnostics).
+    private static final Set<Object> FIRED_WHILE_RAGDOLLED =
+            Collections.newSetFromMap(Collections.synchronizedMap(new WeakHashMap<>()));
+
     private HookTransformResolver() {}
 
     public static void process(@Nullable Level level, @Nullable Object hook) {
@@ -78,6 +82,10 @@ public final class HookTransformResolver {
 
         DynamicHookData anchor = DynamicHookMap.get(hook);
         if (anchor == null) {
+            // Диагностика: стреляет ли вообще УПМ, пока игрок в рэгдолле (одна строка на крюк).
+            if (RagdollClient.isRagdolledLive() && FIRED_WHILE_RAGDOLLED.add(hook)) {
+                DAOTCompat.LOGGER.info("[ragdoll] ODM hook FIRED while player is ragdolled — input works");
+            }
             attach(level, hook, world);
         } else {
             checkTrip(hook, anchor, world);
