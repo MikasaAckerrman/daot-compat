@@ -80,6 +80,7 @@ public final class RagdollLink {
                 case TRIGGER -> trigger(player, new Vec3(payload.vx(), payload.vy(), payload.vz()));
                 case STUN -> stun(player, new Vec3(payload.vx(), payload.vy(), payload.vz()));
                 case EXIT -> exit(player);
+                case ROPE_FORCE -> ropeForce(player, new Vec3(payload.vx(), payload.vy(), payload.vz()));
             }
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("[ragdoll] link call failed", t);
@@ -114,6 +115,33 @@ public final class RagdollLink {
     private static void exit(ServerPlayer player) {
         var session = RagdollAPI.activeSession(player);
         if (session != null) session.release();
+    }
+
+    /**
+     * The rope-force bridge that makes the ODM gear usable while ragdolled: the client sends the
+     * velocity its gear logic wants (AOT's rope pull is already inside the client player's delta
+     * movement), and we converge the ragdoll physics body's velocity toward it. Safety: the body
+     * must be a registered ragdoll sub-level — never a ship.
+     */
+    private static void ropeForce(ServerPlayer player, Vec3 clientMotion) {
+        if (!RagdollAPI.isRagdolled(player)) return;
+        SubLevel sl = SubLevelResolver.findContaining(player.serverLevel(), player.position());
+        if (!(sl instanceof dev.ryanhcode.sable.sublevel.ServerSubLevel serverSubLevel)) return;
+        if (!RagdollAPI.isRagdollSubLevel(serverSubLevel.getUniqueId())) return;
+        try {
+            var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(serverSubLevel);
+            org.joml.Vector3d current = new org.joml.Vector3d();
+            handle.getLinearVelocity(current);
+            // Converge the body velocity toward the intended motion (rope pull already applied
+            // client-side by AOT). Strength is a convergence factor, not a raw impulse.
+            double strength = com.armorberserk.daotcompat.config.DaotConfig.RAGDOLL_FORCE_STRENGTH.get();
+            double dx = (clientMotion.x - current.x) * strength;
+            double dy = (clientMotion.y - current.y) * strength;
+            double dz = (clientMotion.z - current.z) * strength;
+            handle.addLinearAndAngularVelocity(new org.joml.Vector3d(dx, dy, dz), new org.joml.Vector3d(0, 0, 0));
+        } catch (Throwable t) {
+            DAOTCompat.LOGGER.debug("[ragdoll] rope force failed", t);
+        }
     }
 
     private static boolean onCooldown(ServerPlayer player) {

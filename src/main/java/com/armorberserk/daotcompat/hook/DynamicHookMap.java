@@ -34,4 +34,14 @@ public final class DynamicHookMap {
             ANCHORS.put(hook, data);
         }
     }
+
+    /** True while at least one hook is anchored to a sub-level (used by the rope-force bridge). */
+    public static boolean anyAnchored() {
+        synchronized (ANCHORS) {
+            for (DynamicHookData d : ANCHORS.values()) {
+                if (d != null) return true;
+            }
+        }
+        return false;
+    }
 }

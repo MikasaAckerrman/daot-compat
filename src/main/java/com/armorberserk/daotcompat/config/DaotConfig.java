@@ -50,6 +50,14 @@ public final class DaotConfig {
             .comment("Prevent tunnelling through thin airship decks at ODM speeds")
             .define("antiTunnel", true);
 
+    public static final ModConfigSpec.BooleanValue RAGDOLL_FORCE_ENABLED = BUILDER
+            .comment("While ragdolled with ropes attached, the gear's rope pull drags your ragdoll body (requires Sable: Ragdolls)")
+            .define("ragdollForceEnabled", true);
+
+    public static final ModConfigSpec.DoubleValue RAGDOLL_FORCE_STRENGTH = BUILDER
+            .comment("How strongly the ragdoll body's velocity converges toward the rope-pull velocity per tick (0..1)")
+            .defineInRange("ragdollForceStrength", 0.5D, 0.0D, 1.0D);
+
 
     public static final ModConfigSpec SPEC = BUILDER.build();
 

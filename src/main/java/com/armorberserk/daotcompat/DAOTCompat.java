@@ -7,6 +7,7 @@ package com.armorberserk.daotcompat;
 import com.armorberserk.daotcompat.aot.AOTReflect;
 import com.armorberserk.daotcompat.collision.HighSpeedSubLevelGuard;
 import com.armorberserk.daotcompat.config.DaotConfig;
+import com.armorberserk.daotcompat.hook.DynamicHookMap;
 import com.armorberserk.daotcompat.hook.HookTransformResolver;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
 import com.armorberserk.daotcompat.input.RagdollKeybinds;
@@ -98,6 +99,11 @@ public final class DAOTCompat {
                     }
                     RagdollClient.stopOdmSounds();
                     RagdollCameraSync.sync();
+                    // Rope-force bridge: while a hook is anchored to a sub-level, the ragdoll
+                    // body is dragged by the gear's rope pull (makes ODM usable in ragdoll).
+                    if (DynamicHookMap.anyAnchored() && DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
+                        RagdollClient.sendRopeForce(player.getDeltaMovement());
+                    }
                 } else {
                     // Not ragdolled: drain vanilla sneak clicks so nothing queues up.
                     Minecraft.getInstance().options.keyShift.consumeClick();
