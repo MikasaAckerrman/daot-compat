@@ -6,6 +6,7 @@ package com.armorberserk.daotcompat.ragdoll;
 
 import com.armorberserk.daotcompat.DAOTCompat;
 import com.armorberserk.daotcompat.sable.SubLevelResolver;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.leo.sableplayerragdoll.api.DespawnCondition;
 import dev.leo.sableplayerragdoll.api.RagdollAPI;
 import dev.leo.sableplayerragdoll.api.RagdollLaunchOptions;
