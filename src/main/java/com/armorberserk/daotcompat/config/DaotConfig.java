@@ -50,6 +50,16 @@ public final class DaotConfig {
             .comment("Prevent tunnelling through thin airship decks at ODM speeds")
             .define("antiTunnel", true);
 
+    public static final ModConfigSpec.ConfigValue<String> COMBO_ACTION = BUILDER
+            .comment("Action triggered by the key+mouse combo: NONE, EXIT_RAGDOLL or RELEASE_ROPES",
+                    "Keyboard part = the key you bind to that action in Controls (Controls -> DAOT Aeronautics Compat)")
+            .define("comboAction", "EXIT_RAGDOLL");
+
+    public static final ModConfigSpec.IntValue COMBO_MOUSE_BUTTON = BUILDER
+            .comment("Mouse button that must be held while pressing the keyboard key: -1 = off, 0 = LMB, 1 = RMB, 2 = MMB",
+                    "Tip: rebind vanilla 'attack'/'use' conflicts first if needed")
+            .defineInRange("comboMouseButton", 1, -1, 7);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     private DaotConfig() {}

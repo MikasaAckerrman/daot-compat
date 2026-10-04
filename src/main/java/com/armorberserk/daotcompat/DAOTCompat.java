@@ -9,6 +9,7 @@ import com.armorberserk.daotcompat.collision.HighSpeedSubLevelGuard;
 import com.armorberserk.daotcompat.config.DaotConfig;
 import com.armorberserk.daotcompat.hook.HookTransformResolver;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
+import com.armorberserk.daotcompat.input.ComboBind;
 import com.armorberserk.daotcompat.input.RagdollKeybinds;
 import com.armorberserk.daotcompat.network.DaotNetworking;
 import com.armorberserk.daotcompat.ragdoll.RagdollCameraSync;
@@ -76,9 +77,11 @@ public final class DAOTCompat {
                 }
 
                 // Quick ragdoll exit: drain presses so one tap is one exit request. The server
-                // refuses during a stun window — that is the point of being stunned.
+                // refuses during a stun window — that is the point of being stunned. When the
+                // combo bind handles this action, the single key press is suppressed on purpose.
+                boolean comboHandlesExit = ComboBind.handlesAction("EXIT_RAGDOLL");
                 while (RagdollKeybinds.EXIT_RAGDOLL.consumeClick()) {
-                    RagdollClient.exit();
+                    if (!comboHandlesExit) RagdollClient.exit();
                 }
 
                 // Release both ODM ropes without leaving the ragdoll.
@@ -86,16 +89,20 @@ public final class DAOTCompat {
                     RagdollClient.releaseRopes();
                 }
 
+                // Combo bind: keyboard key + mouse button together (daotcompat-client.toml).
+                ComboBind.tick(player);
+
                 // While actually ragdolled (live check): Shift exits mid-air, the looping ODM
                 // gear sound is suppressed every tick (AOT restarts it while hooks are held),
                 // and the ragdoll camera follows the player's current F5 perspective.
                 if (RagdollClient.isRagdolledLive()) {
-                    if (Minecraft.getInstance().options.keyShift.isDown()) {
+                    if (!comboHandlesExit && Minecraft.getInstance().options.keyShift.isDown()) {
                         RagdollClient.exit();
                     }
                     RagdollClient.stopOdmSounds();
                     RagdollCameraSync.sync();
                 }
+                RagdollClient.tickSoundSuppressionState();
             });
         }
 

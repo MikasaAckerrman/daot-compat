@@ -126,6 +126,7 @@ public final class RagdollClient {
      */
     private static volatile boolean soundMethodProbed;
     private static java.lang.reflect.Method stopAllSoundsMethod;
+    private static boolean soundSuppressionActive;
 
     public static void stopOdmSounds() {
         LocalPlayer player = DAOTCompat.minecraft().player;
@@ -146,8 +147,20 @@ public final class RagdollClient {
             }
             if (stopAllSoundsMethod != null) {
                 stopAllSoundsMethod.invoke(null, player);
+                if (!soundSuppressionActive) {
+                    soundSuppressionActive = true;
+                    DAOTCompat.LOGGER.info("[ragdoll] ODM sound suppression START");
+                }
             }
         } catch (Throwable ignored) {
+        }
+    }
+
+    /** Logs the end of the suppression window; call every client tick. */
+    public static void tickSoundSuppressionState() {
+        if (soundSuppressionActive && !isRagdolledLive()) {
+            soundSuppressionActive = false;
+            DAOTCompat.LOGGER.info("[ragdoll] ODM sound suppression END");
         }
     }
 
