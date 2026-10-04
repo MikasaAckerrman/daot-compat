@@ -86,15 +86,21 @@ public final class DAOTCompat {
                     RagdollClient.releaseRopes();
                 }
 
-                // While actually ragdolled (live check): Shift exits mid-air, the looping ODM
-                // gear sound is suppressed every tick (AOT restarts it while hooks are held),
-                // and the ragdoll camera follows the player's current F5 perspective.
+                // While actually ragdolled (live check): a fresh Shift PRESS exits mid-air (hold
+                // does NOT — ODM uses Shift for reel-in, so a held Shift must not kick the player
+                // out of the ragdoll), the looping ODM gear sound is suppressed every tick, and
+                // the ragdoll camera follows the player's current F5 perspective.
                 if (RagdollClient.isRagdolledLive()) {
-                    if (Minecraft.getInstance().options.keyShift.isDown()) {
+                    // Edge-based: consumeClick() fires only on a fresh sneak press, never on hold.
+                    while (Minecraft.getInstance().options.keyShift.consumeClick()) {
                         RagdollClient.exit();
+                        break;
                     }
                     RagdollClient.stopOdmSounds();
                     RagdollCameraSync.sync();
+                } else {
+                    // Not ragdolled: drain vanilla sneak clicks so nothing queues up.
+                    Minecraft.getInstance().options.keyShift.consumeClick();
                 }
                 RagdollClient.tickSoundSuppressionState();
             });
