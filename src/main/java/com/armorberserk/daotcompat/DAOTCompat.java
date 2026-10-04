@@ -97,6 +97,13 @@ public final class DAOTCompat {
                         RagdollClient.exit();
                         break;
                     }
+                    // ПКМ в рэгдолле = встать: vanilla right-click while seated targets the
+                    // ragdoll seat block, so the gear item never receives it. Swallow the press
+                    // and un-ragdoll instead — the next right click fires the ODM gear normally.
+                    while (Minecraft.getInstance().options.keyUse.consumeClick()) {
+                        RagdollClient.exit();
+                        break;
+                    }
                     RagdollClient.stopOdmSounds();
                     RagdollCameraSync.sync();
                     // Rope-force bridge: while a hook is anchored to a sub-level, the ragdoll
@@ -105,8 +112,9 @@ public final class DAOTCompat {
                         RagdollClient.sendRopeForce(player.getDeltaMovement());
                     }
                 } else {
-                    // Not ragdolled: drain vanilla sneak clicks so nothing queues up.
+                    // Not ragdolled: drain vanilla sneak/use clicks so nothing queues up.
                     Minecraft.getInstance().options.keyShift.consumeClick();
+                    Minecraft.getInstance().options.keyUse.consumeClick();
                 }
                 RagdollClient.tickSoundSuppressionState();
             });
