@@ -23,6 +23,9 @@ public final class RagdollClient {
 
     private static final boolean AVAILABLE = detect();
     private static volatile long stunUntilMs;
+    // Window during which the local player is expected to be in a ragdoll we launched.
+    // Used for: auto-exit on re-hook, Shift-in-air exit, camera mode syncing.
+    private static volatile long ragdollUntilMs;
 
     private RagdollClient() {}
 
@@ -45,13 +48,26 @@ public final class RagdollClient {
         return System.currentTimeMillis() < stunUntilMs;
     }
 
+    /** True while a ragdoll we triggered is plausibly still active (30s window, cleared on exit). */
+    public static boolean isRagdollRecent() {
+        return System.currentTimeMillis() < ragdollUntilMs;
+    }
+
+    public static void clearRagdollWindow() {
+        ragdollUntilMs = 0;
+    }
+
     /** Hook anchor was just lost while moving fast — ordinary hard crash (ODM stays usable). */
     public static void triggerCrash(Vec3 playerMotion) {
+        markRagdollTriggered();
+        stopOdmSounds();
         send(RagdollTriggerPayload.Action.TRIGGER, playerMotion);
     }
 
     /** Hook anchor lost at very high speed — hard crash with a stun window. */
     public static void triggerStun(Vec3 playerMotion) {
+        markRagdollTriggered();
+        stopOdmSounds();
         stunUntilMs = System.currentTimeMillis() + DaotConfig.STUN_TICKS.get() * 50L;
         send(RagdollTriggerPayload.Action.STUN, playerMotion);
         DAOTCompat.LOGGER.info("[hook] STUN requested ({} ms)", DaotConfig.STUN_TICKS.get() * 50L);
@@ -59,14 +75,42 @@ public final class RagdollClient {
 
     /** Arrived at a weak flat anchor at speed — trip. */
     public static void triggerTrip(Vec3 horizontalMotion) {
+        markRagdollTriggered();
+        stopOdmSounds();
         send(RagdollTriggerPayload.Action.TRIGGER, horizontalMotion);
+    }
+
+    /**
+     * AOT plays looping ODM sounds (rope tension, gas) while its ODMTickHandler thinks the gear
+     * is active; the player seated on a ragdoll still counts as hooked, so the loop drones on.
+     * Kill the looped instances reflectively — re-hooking restarts them naturally.
+     */
+    private static void stopOdmSounds() {
+        try {
+            Class<?> mgr = Class.forName("daot.ODMSoundManager");
+            java.lang.reflect.Method m = mgr.getMethod("stopAllSounds");
+            m.setAccessible(true);
+            m.invoke(null);
+        } catch (Throwable ignored) {
+        }
     }
 
     /** Ask the server to release the current ragdoll session immediately. */
     public static void exit() {
         LocalPlayer player = DAOTCompat.minecraft().player;
         if (player == null) return;
+        ragdollUntilMs = 0;
         PacketDistributor.sendToServer(RagdollTriggerPayload.EXIT);
+    }
+
+    /** Release both ODM ropes (hooks) client-side — they belong to the local player's gear. */
+    public static void releaseRopes() {
+        com.armorberserk.daotcompat.aot.AOTReflect.releaseBoth();
+    }
+
+    private static void markRagdollTriggered() {
+        ragdollUntilMs = System.currentTimeMillis() + 30_000L;
+        RagdollCameraSync.reset();
     }
 
     private static void send(RagdollTriggerPayload.Action action, Vec3 motion) {

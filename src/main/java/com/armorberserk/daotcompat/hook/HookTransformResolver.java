@@ -98,6 +98,13 @@ public final class HookTransformResolver {
             }
             if (notFinite(local)) return;
             DynamicHookMap.put(hook, new DynamicHookData(id, local, level.dimension()));
+            // Re-hooking in mid-air while a ragdoll we triggered is running ends it: the rope
+            // caught something solid, so the player is back in control.
+            if (RagdollClient.isRagdollRecent()) {
+                RagdollClient.clearRagdollWindow();
+                RagdollClient.exit();
+                DAOTCompat.LOGGER.info("[hook] re-hooked in air while ragdolled -> exiting ragdoll");
+            }
             return;
         }
         // Nothing at the reported point - it may already be a raw plot coordinate.

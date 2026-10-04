@@ -22,10 +22,18 @@ public final class RagdollKeybinds {
             GLFW.GLFW_KEY_X,
             "key.categories.daotcompat");
 
+    /** Releases both ODM ropes without releasing the ragdoll — ropes can be re-shot any time. */
+    public static final KeyMapping RELEASE_ROPES = new KeyMapping(
+            "key.daotcompat.release_ropes",
+            InputConstants.Type.KEYSYM,
+            GLFW.GLFW_KEY_UNKNOWN,
+            "key.categories.daotcompat");
+
     private RagdollKeybinds() {}
 
     /** Must be registered on the MOD event bus (RegisterKeyMappingsEvent is a mod-bus event). */
     public static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
         event.register(EXIT_RAGDOLL);
+        event.register(RELEASE_ROPES);
     }
 }

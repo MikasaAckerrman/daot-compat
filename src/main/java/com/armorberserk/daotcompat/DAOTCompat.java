@@ -11,6 +11,7 @@ import com.armorberserk.daotcompat.hook.HookTransformResolver;
 import com.armorberserk.daotcompat.hook.RemoteHookFollower;
 import com.armorberserk.daotcompat.input.RagdollKeybinds;
 import com.armorberserk.daotcompat.network.DaotNetworking;
+import com.armorberserk.daotcompat.ragdoll.RagdollCameraSync;
 import com.armorberserk.daotcompat.ragdoll.RagdollClient;
 import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
@@ -79,6 +80,20 @@ public final class DAOTCompat {
                 while (RagdollKeybinds.EXIT_RAGDOLL.consumeClick()) {
                     RagdollClient.exit();
                 }
+
+                // Release both ODM ropes without leaving the ragdoll.
+                while (RagdollKeybinds.RELEASE_ROPES.consumeClick()) {
+                    RagdollClient.releaseRopes();
+                }
+
+                // Vanilla hint says "Shift: Get Up" — make Shift work mid-air too while a
+                // ragdoll we triggered is plausibly still running.
+                if (RagdollClient.isRagdollRecent() && Minecraft.getInstance().options.keyShift.isDown()) {
+                    RagdollClient.exit();
+                }
+
+                // Ragdoll camera follows the player's current F5 perspective.
+                RagdollCameraSync.sync();
             });
         }
 

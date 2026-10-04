@@ -124,4 +124,10 @@ public final class AOTReflect {
         } catch (Throwable ignored) {
         }
     }
+
+    /** Releases both of the local player's hooks (if active). Client-side objects. */
+    public static void releaseBoth() {
+        release(getLeftHook());
+        release(getRightHook());
+    }
 }
