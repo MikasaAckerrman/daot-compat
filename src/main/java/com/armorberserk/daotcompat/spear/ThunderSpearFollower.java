@@ -27,16 +27,59 @@ import java.util.WeakHashMap;
  * airship stays at a fixed world point while the airship sails on. We anchor the spear in
  * sub-level local space on the first lodged tick and re-place it from the sub-level's pose
  * each server tick, so its fuse explosion stays where it struck.
+ *
+ * <h3>Tick-ordering guarantee</h3>
+ * <p>We listen on {@code EntityTickEvent.Pre}, which NeoForge fires in
+ * {@code ServerLevel.tickEntity()} <em>before</em> the call to {@code entity.tick()}.
+ * AOT's fuse countdown and its {@code explode()} call happen inside that {@code entity.tick()},
+ * so our position correction is always applied before the explosion position is sampled —
+ * even in the very tick the spear detonates.
+ *
+ * <h3>Fix 3 (stage 1): render interpolation must be corrected too, not just the position</h3>
+ * <p>Repositioning with {@code entity.setPos(next)} fixes where the spear <em>is</em>, but not how
+ * the client draws it. {@code ThunderSpearEntityRenderer.render()} samples
+ * {@code entity.getPosition(partialTick)} ({@code method_30950}), which linearly interpolates
+ * between the previous-tick position {@code (xo,yo,zo)} and the current {@code (x,y,z)} every frame.
+ * Our correction teleports the spear by a full tick of ship translation <em>and rotation</em> each
+ * tick while leaving {@code (xo,yo,zo)} pointing at the stale pre-move world point, so the
+ * interpolated draw position swings wildly — often into solid blocks or far outside the loaded
+ * area — which reads to the player as "the spear doesn't render" / flickers away, worst as the ship
+ * gathers rotation.
+ *
+ * <p>Sable ships a first-party fix for exactly this: after each reposition we call
+ * {@code EntitySubLevelUtil.setOldPosNoMovement(entity)} (via {@link SableBridge}), which recomputes
+ * {@code (xo,yo,zo)} from the sub-level's <em>previous-tick</em> pose composed with the entity's
+ * local offset, so the next interpolated frame follows the ship smoothly instead of jumping. Its
+ * {@code else} branch (entity not Sable-tracked) simply pins old-pos to the current pos, which still
+ * removes the swing, so the call is safe to make unconditionally.
  */
 public final class ThunderSpearFollower {
 
     // Don't move the spear for sub-millimetre changes (a stationary ship must be a no-op).
     private static final double IDLE_SQR = 1.0E-4D;
 
-    private static final Map<Entity, DynamicHookData> ANCHORS =
+    // Fix 2 (code review round 2): TTL invalidation, same rationale as RemoteHookFollower -
+    // if AOT ever reuses spear-entity references across pooling we still auto-heal, and a
+    // monotonic tick counter (not wall-clock) avoids any dependency on real time.
+    private static final long STALE_TICKS = 100L; // ~5s at 20 tps
+    private static long tickCounter;
+
+    private record TrackedAnchor(DynamicHookData data, long lastSeenTick) {}
+
+    /** Active sub-level anchors for lodged spears. Weak keys auto-drop with the entity. */
+    private static final Map<Entity, TrackedAnchor> ANCHORS =
             Collections.synchronizedMap(new WeakHashMap<>());
+
+    /** One-shot diagnostic log gate: present after the first diagnose() call for an entity. */
     private static final Set<Entity> LOGGED =
             Collections.newSetFromMap(Collections.synchronizedMap(new WeakHashMap<>()));
+
+    /**
+     * Last world-space position we moved the spear to, used to measure drift at detonation.
+     * Null entry means the spear was never on a tracked sub-level.
+     */
+    private static final Map<Entity, Vec3> LAST_WORLD_POS =
+            Collections.synchronizedMap(new WeakHashMap<>());
 
     private ThunderSpearFollower() {}
 
@@ -45,14 +88,25 @@ public final class ThunderSpearFollower {
         if (level == null || level.isClientSide()) return; // server holds the real position
         if (!SpearReflect.isThunderSpear(entity)) return;
 
+        tickCounter++;
+        expireStaleAnchors();
+
         if (!SpearReflect.isLodged(entity)) {
-            ANCHORS.remove(entity);
+            // The spear just exploded or disappeared.  If we were tracking it, log the
+            // detonation drift so users can confirm the fix is working in their setup.
+            TrackedAnchor lastAnchor = ANCHORS.remove(entity);
+            if (lastAnchor != null) {
+                logDetonation(entity, LAST_WORLD_POS.get(entity));
+            }
+            LAST_WORLD_POS.remove(entity);
             LOGGED.remove(entity);
             return;
         }
 
         Vec3 pos = entity.position();
-        DynamicHookData anchor = ANCHORS.get(entity);
+        TrackedAnchor tracked = ANCHORS.get(entity);
+        DynamicHookData anchor = tracked == null ? null : tracked.data();
+
         if (anchor == null) {
             SubLevel sl = SubLevelResolver.findContaining(level, pos);
             if (LOGGED.add(entity)) diagnose(level, pos, sl);
@@ -66,13 +120,27 @@ public final class ThunderSpearFollower {
                 return;
             }
             if (notFinite(local)) return;
-            anchor = new DynamicHookData(id, local);
-            ANCHORS.put(entity, anchor);
+            anchor = new DynamicHookData(id, local, level.dimension());
+            ANCHORS.put(entity, new TrackedAnchor(anchor, tickCounter));
+            LAST_WORLD_POS.put(entity, pos);
+        } else {
+            ANCHORS.put(entity, new TrackedAnchor(anchor, tickCounter));
+        }
+
+        // Guard: if entity.level() changed dimension (e.g. a portal edge case), drop the anchor
+        // rather than querying Sable with a UUID that may collide in the new Level.
+        if (!anchor.dimensionKey().equals(level.dimension())) {
+            DAOTCompat.LOGGER.debug("[spear] dropped anchor: dimension changed from {} to {}",
+                    anchor.dimensionKey().location(), level.dimension().location());
+            ANCHORS.remove(entity);
+            LAST_WORLD_POS.remove(entity);
+            return;
         }
 
         SubLevel sl = SableBridge.getSubLevel(level, anchor.subLevelId());
         if (sl == null) {
             ANCHORS.remove(entity);
+            LAST_WORLD_POS.remove(entity);
             return;
         }
         Vec3 next;
@@ -80,14 +148,64 @@ public final class ThunderSpearFollower {
             next = sl.logicalPose().transformPosition(anchor.localPosition());
         } catch (Throwable t) {
             ANCHORS.remove(entity);
+            LAST_WORLD_POS.remove(entity);
             return;
         }
         if (notFinite(next)) {
             ANCHORS.remove(entity);
+            LAST_WORLD_POS.remove(entity);
             return;
         }
         if (pos.distanceToSqr(next) < IDLE_SQR) return; // nothing moved - leave the spear be
         entity.setPos(next.x, next.y, next.z);
+
+        // Render-interpolation fix (see class javadoc "Fix 3"). setPos only moved the *current*
+        // position; the renderer interpolates between (xo,yo,zo) and (x,y,z) every frame, and our
+        // teleport left (xo,yo,zo) at the stale pre-ship-move world point. Recompute the old-pos
+        // from the sub-level's previous-tick pose via Sable's own helper so the frame in between is
+        // smooth (or, if the spear isn't a Sable-tracked entity, pinned to the current pos, which
+        // still removes the wild swing). Routed through SableBridge so it can never throw.
+        //
+        // TODO(stage-later): a more complete integration would register the spear into Sable's own
+        // sub-level "tracking" system (the @Unique sable$trackingSubLevel field set inside
+        // dev.ryanhcode.sable.sublevel.entity_collision.SubLevelEntityCollision#collide and exposed
+        // via the mixin interface EntityMovementExtension#sable$setTrackingSubLevel(SubLevel)). That
+        // would let Sable's own per-tick pose/render systems carry the spear natively instead of our
+        // manual reposition, and setOldPosNoMovement would then take its smooth tracked branch every
+        // tick. It needs a mixin-interface cast plus explicit register/unregister on lodge/drop, so
+        // it is deferred; the unconditional call below already fixes the reported invisibility.
+        SableBridge.setOldPosNoMovement(entity);
+
+        LAST_WORLD_POS.put(entity, next); // remember for detonation drift log
+    }
+
+    /** Fix 2: force-drop spear anchors that have not been confirmed lodged for STALE_TICKS. */
+    private static void expireStaleAnchors() {
+        synchronized (ANCHORS) {
+            ANCHORS.entrySet().removeIf(e -> {
+                boolean stale = tickCounter - e.getValue().lastSeenTick() > STALE_TICKS;
+                if (stale) {
+                    DAOTCompat.LOGGER.debug("[spear] stale anchor removed (possible AOT object pooling)");
+                }
+                return stale;
+            });
+        }
+    }
+
+    /**
+     * One-shot per spear: dumps where it detonated and the drift from the last anchor position.
+     * A near-zero drift confirms our follower was keeping the spear correctly positioned.
+     */
+    private static void logDetonation(Entity entity, Vec3 lastWorld) {
+        Vec3 current = entity.position();
+        if (lastWorld == null) {
+            DAOTCompat.LOGGER.info("[spear] detonated at {} (no tracked anchor — was in static terrain)",
+                    fmt(current));
+        } else {
+            Vec3 drift = current.subtract(lastWorld);
+            DAOTCompat.LOGGER.info("[spear] detonated at {} | last-anchor-world={} | drift={} (near-zero = fix working)",
+                    fmt(current), fmt(lastWorld), fmt(drift));
+        }
     }
 
     /** One-shot per spear: dumps where it lodged and how the sub-levels map that point. */

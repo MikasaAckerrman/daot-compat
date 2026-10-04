@@ -9,8 +9,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.util.Collection;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.ConcurrentModificationException;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -53,11 +55,29 @@ public final class RemoteHookReflect {
         return ready;
     }
 
-    /** @return every tracked remote hook record, or empty. */
-    public static Collection<?> hooks() {
+    /**
+     * @return a defensive snapshot of every tracked remote hook record, or empty.
+     *
+     * <p><b>Fix 6 (code review round 2):</b> {@code getAllHooks.invoke(null)} returns AOT's own
+     * live {@code Map}; its {@code .values()} is a live view, not a snapshot, so iterating it
+     * directly in {@code RemoteHookFollower.tick()} risked a {@link ConcurrentModificationException}
+     * if AOT mutated the map from another thread (e.g. a network packet handler) mid-iteration.
+     * We do not control AOT's internal locking, so this is layered: {@code synchronized(m)} is a
+     * best-effort measure that only helps if AOT happens to synchronize its own mutations on the
+     * same map instance, and the surrounding try/catch is the actual guarantee — if a mutation
+     * still slips in while we copy, we swallow the CME and hand back whatever we already collected
+     * instead of crashing the client tick.
+     */
+    public static List<?> hooks() {
         if (!isAvailable()) return Collections.emptyList();
         try {
-            return getAllHooks.invoke(null) instanceof Map<?, ?> m ? m.values() : Collections.emptyList();
+            Object result = getAllHooks.invoke(null);
+            if (!(result instanceof Map<?, ?> m)) return Collections.emptyList();
+            synchronized (m) {
+                return new ArrayList<>(m.values());
+            }
+        } catch (ConcurrentModificationException cme) {
+            return Collections.emptyList();
         } catch (Throwable t) {
             return Collections.emptyList();
         }

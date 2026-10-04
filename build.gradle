@@ -58,6 +58,8 @@ dependencies {
     compileOnly files('libs/sable-companion-common-1.21.1-1.6.0.jar')
     compileOnly files('libs/create-aeronautics-1.21.1-1.2.1.jar')
     compileOnly files('libs/create-1.21.1-6.0.10.jar')
+    // Sable: Ragdolls — ragdoll bridge (optional at runtime, guarded by RagdollLink)
+    compileOnly files('libs/sable_player_ragdoll-1.21.1-0.7.5.jar')
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

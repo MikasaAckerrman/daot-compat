@@ -5,9 +5,7 @@
   "compatibilityLevel": "JAVA_21",
   "refmap": "daotcompat.refmap.json",
   "mixins": [],
-  "client": [
-    "client.LocalPlayerTickMixin"
-  ],
+  "client": [],
   "server": [],
   "injectors": {
     "defaultRequire": 0
