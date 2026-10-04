@@ -152,7 +152,7 @@ public final class HookTransformResolver {
         // Guard against a stale anchor from a previous dimension. Sable UUID collisions across
         // dimensions are astronomically unlikely, but an explicit check makes the drop debuggable.
         if (!anchor.dimensionKey().equals(level.dimension())) {
-            DAOTCompat.LOGGER.warn("[hook] dimension changed from {} to {}, releasing hook",
+            DAOTCompat.LOGGER.debug("[hook] dimension changed from {} to {}, releasing hook",
                     anchor.dimensionKey().location(), level.dimension().location());
             drop(hook);
             return;
@@ -160,7 +160,7 @@ public final class HookTransformResolver {
         SubLevel sl = SableBridge.getSubLevel(level, anchor.subLevelId());
         if (sl == null) {
             // [FIX v1.3.5] Improved error handling for Hook Sync on physics objects
-            DAOTCompat.LOGGER.warn("[hook] sub-level not found (UUID: {}), releasing hook",
+            DAOTCompat.LOGGER.debug("[hook] sub-level not found (UUID: {}), releasing hook",
                     anchor.subLevelId());
             drop(hook);
             return;

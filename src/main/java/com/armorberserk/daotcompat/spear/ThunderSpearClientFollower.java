@@ -49,6 +49,9 @@ public final class ThunderSpearClientFollower {
     private static final Map<Entity, Tracked> ANCHORS =
             Collections.synchronizedMap(new WeakHashMap<>());
     private static long tickCounter;
+    // Hot-path cache: the first spear entity we meet pins its EntityType; every later entity is
+    // filtered by a single reference compare instead of a reflective class check per entity.
+    private static volatile net.minecraft.world.entity.EntityType<?> cachedSpearType;
 
     private ThunderSpearClientFollower() {}
 
@@ -58,7 +61,14 @@ public final class ThunderSpearClientFollower {
         expireStaleAnchors();
 
         for (Entity entity : clientLevel.entitiesForRendering()) {
-            if (!SpearReflect.isThunderSpear(entity)) continue;
+            if (entity.isRemoved()) continue;
+            net.minecraft.world.entity.EntityType<?> type = entity.getType();
+            if (cachedSpearType == null) {
+                if (!SpearReflect.isThunderSpear(entity)) continue;
+                cachedSpearType = type;
+            } else if (type != cachedSpearType) {
+                continue;
+            }
             if (!SpearReflect.isLodged(entity)) {
                 ANCHORS.remove(entity);
                 continue;

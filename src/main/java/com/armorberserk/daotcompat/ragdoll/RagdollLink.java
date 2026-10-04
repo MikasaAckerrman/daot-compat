@@ -90,7 +90,7 @@ public final class RagdollLink {
     }
 
     private static void trigger(ServerPlayer player, Vec3 velocity) {
-        if (RagdollAPI.isRagdolled(player)) return;
+        if (!player.isAlive() || RagdollAPI.isRagdolled(player)) return;
         if (onCooldown(player)) return;
         // No despawn conditions: the server config governs expiry, Shift exits after
         // minDismountTicks, and the ODM gear stays fully usable while the player is down.
@@ -101,7 +101,7 @@ public final class RagdollLink {
     }
 
     private static void stun(ServerPlayer player, Vec3 velocity) {
-        if (RagdollAPI.isRagdolled(player)) return;
+        if (!player.isAlive() || RagdollAPI.isRagdolled(player)) return;
         int ticks = com.armorberserk.daotcompat.config.DaotConfig.STUN_TICKS.get();
         RagdollLaunchOptions options = RagdollLaunchOptions.builder()
                 .lockDismount(true)
@@ -126,7 +126,7 @@ public final class RagdollLink {
      * must be a registered ragdoll sub-level — never a ship.
      */
     private static void ropeForce(ServerPlayer player, Vec3 clientMotion) {
-        if (!RagdollAPI.isRagdolled(player)) return;
+        if (!player.isAlive() || !RagdollAPI.isRagdolled(player)) return;
         SubLevel sl = SubLevelResolver.findContaining(player.serverLevel(), player.position());
         if (!(sl instanceof dev.ryanhcode.sable.sublevel.ServerSubLevel serverSubLevel)) return;
         if (!RagdollAPI.isRagdollSubLevel(serverSubLevel.getUniqueId())) return;
@@ -137,9 +137,12 @@ public final class RagdollLink {
             // Converge the body velocity toward the intended motion (rope pull already applied
             // client-side by AOT). Strength is a convergence factor, not a raw impulse.
             double strength = com.armorberserk.daotcompat.config.DaotConfig.RAGDOLL_FORCE_STRENGTH.get();
-            double dx = (clientMotion.x - current.x) * strength;
-            double dy = (clientMotion.y - current.y) * strength;
-            double dz = (clientMotion.z - current.z) * strength;
+            Vec3 clamped = clamp(clientMotion, MAX_LAUNCH_SPEED);
+            // Safety clamp: at most 3 m/s of velocity change per tick, so a bad client value
+            // can never fling the physics body into orbit.
+            double dx = org.joml.Math.clamp((clamped.x - current.x) * strength, -3.0, 3.0);
+            double dy = org.joml.Math.clamp((clamped.y - current.y) * strength, -3.0, 3.0);
+            double dz = org.joml.Math.clamp((clamped.z - current.z) * strength, -3.0, 3.0);
             handle.addLinearAndAngularVelocity(new org.joml.Vector3d(dx, dy, dz), new org.joml.Vector3d(0, 0, 0));
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("[ragdoll] rope force failed", t);
