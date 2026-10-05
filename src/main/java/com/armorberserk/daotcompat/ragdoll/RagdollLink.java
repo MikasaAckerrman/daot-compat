@@ -92,9 +92,12 @@ public final class RagdollLink {
     private static void trigger(ServerPlayer player, Vec3 velocity) {
         if (!player.isAlive() || RagdollAPI.isRagdolled(player)) return;
         if (onCooldown(player)) return;
-        // No despawn conditions: the server config governs expiry, Shift exits after
-        // minDismountTicks, and the ODM gear stays fully usable while the player is down.
-        RagdollAPI.launch(player, clamp(velocity, MAX_LAUNCH_SPEED));
+        // autoSeat(false): игрок НЕ пассажир → isPassenger()=false → гейт isPassenger
+        // в AOT ODMTickHandler пройден → УПМ стреляет из рэгдолла
+        RagdollLaunchOptions options = RagdollLaunchOptions.builder()
+                .autoSeat(false)
+                .build();
+        RagdollAPI.launch(player, clamp(velocity, MAX_LAUNCH_SPEED), options);
         DAOTCompat.LOGGER.info("[ragdoll] launched for {} at {} m/s",
                 player.getGameProfile().getName(),
                 String.format(java.util.Locale.ROOT, "%.1f", velocity.length()));
