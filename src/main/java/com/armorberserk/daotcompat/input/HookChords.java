@@ -5,8 +5,10 @@
 package com.armorberserk.daotcompat.input;
 
 import com.armorberserk.daotcompat.DAOTCompat;
+import com.mojang.blaze3d.platform.InputConstants;
 import com.armorberserk.daotcompat.config.DaotConfig;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.Minecraft;
 import org.lwjgl.glfw.GLFW;
 
