@@ -47,6 +47,7 @@ import org.slf4j.LoggerFactory;
 public final class DAOTCompat {
 
     public static final String MOD_ID = "daotcompat";
+    private static boolean ragdollUseWasDown;
     public static final Logger LOGGER = LoggerFactory.getLogger("DAOT Compat");
 
     public DAOTCompat(IEventBus modBus, ModContainer container) {
@@ -107,10 +108,12 @@ public final class DAOTCompat {
                     }
                     // ПКМ в рэгдолле = выстрел крюками: сиденье глотает ванильный use,
                     // поэтому стреляем программно — крюк летит по прицелу и цепляется.
-                    while (Minecraft.getInstance().options.keyUse.consumeClick()) {
+                    // Edge-детект isDown: ванильный handleKeybinds осушает consumeClick до нас.
+                    boolean useDownNow = Minecraft.getInstance().options.keyUse.isDown();
+                    if (useDownNow && !ragdollUseWasDown) {
                         RagdollOdmBridge.fireHooksAtCrosshair(player);
-                        break;
                     }
+                    ragdollUseWasDown = useDownNow;
                     RagdollClient.stopOdmSounds();
                     RagdollCameraSync.sync();
                     // Rope-force bridge: while a hook is anchored to a sub-level, the ragdoll
