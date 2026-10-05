@@ -94,7 +94,12 @@ public final class HookTransformResolver {
     }
 
     private static void attach(Level level, Object hook, Vec3 world) {
-        SubLevel sl = SubLevelResolver.findContaining(level, world);
+        // Progressive probe: point-blank hooks land a hair off the ship surface where the
+        // default 0.05 probe misses. Widen before giving up — this is the "chains but not
+        // always" fix for close-range grapples.
+        SubLevel sl = SubLevelResolver.findContaining(level, world, 0.05D);
+        if (sl == null) sl = SubLevelResolver.findContaining(level, world, 0.5D);
+        if (sl == null) sl = SubLevelResolver.findContaining(level, world, 1.5D);
         if (sl != null) {
             UUID id = sl.getUniqueId();
             if (id == null) return;

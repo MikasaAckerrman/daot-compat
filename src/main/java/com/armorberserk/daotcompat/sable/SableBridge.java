@@ -119,16 +119,17 @@ public final class SableBridge {
      * harmless no-op. Looked up reflectively so the build does not depend on the mixin interface
      * being present in the pinned Sable jar.
      */
-    public static void setTrackingSubLevel(@Nullable Entity entity, @Nullable SubLevel subLevel) {
-        if (entity == null || subLevel == null) return;
+    public static boolean setTrackingSubLevel(@Nullable Entity entity, @Nullable SubLevel subLevel) {
+        if (entity == null || subLevel == null) return false;
         try {
-            if (invokeSetTracking(entity.getClass(), entity, subLevel)) return;
+            if (invokeSetTracking(entity.getClass(), entity, subLevel)) return true;
             for (Class<?> iface : entity.getClass().getInterfaces()) {
-                if (invokeSetTracking(iface, entity, subLevel)) return;
+                if (invokeSetTracking(iface, entity, subLevel)) return true;
             }
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("setTrackingSubLevel failed", t);
         }
+        return false;
     }
 
     private static boolean invokeSetTracking(Class<?> type, Object entity, SubLevel subLevel) {

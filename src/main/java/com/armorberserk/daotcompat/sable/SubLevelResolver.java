@@ -30,12 +30,28 @@ public final class SubLevelResolver {
      */
     @Nullable
     public static SubLevel findContaining(@Nullable Level level, @Nullable Vec3 pos, @Nullable SubLevel hint) {
+        return findContaining(level, pos, hint, PROBE);
+    }
+
+    @Nullable
+    public static SubLevel findContaining(@Nullable Level level, @Nullable Vec3 pos) {
+        return findContaining(level, pos, null, PROBE);
+    }
+
+    /**
+     * Probe-radius overload: point-blank hooks can land a fraction of a block off the ship
+     * surface, where the default 0.05 probe misses. Callers may widen the probe progressively
+     * (0.05 → 0.5 → 1.5) before giving up on an anchor.
+     */
+    @Nullable
+    public static SubLevel findContaining(@Nullable Level level, @Nullable Vec3 pos, @Nullable SubLevel hint,
+            double probeRadius) {
         if (level == null || pos == null) return null;
         if (!Double.isFinite(pos.x) || !Double.isFinite(pos.y) || !Double.isFinite(pos.z)) return null;
 
         if (hint != null && !hint.isRemoved()) {
             try {
-                if (hint.boundingBox().intersects(probeBox(pos))) return hint;
+                if (hint.boundingBox().intersects(probeBox(pos, probeRadius))) return hint;
             } catch (Throwable ignored) {
                 // fall through to the full scan below
             }
@@ -45,7 +61,7 @@ public final class SubLevelResolver {
         if (container == null) return null;
 
         try {
-            for (SubLevel sl : container.queryIntersecting(probeBox(pos))) {
+            for (SubLevel sl : container.queryIntersecting(probeBox(pos, probeRadius))) {
                 if (sl != null && !sl.isRemoved()) return sl;
             }
         } catch (Throwable ignored) {
@@ -54,13 +70,13 @@ public final class SubLevelResolver {
     }
 
     @Nullable
-    public static SubLevel findContaining(@Nullable Level level, @Nullable Vec3 pos) {
-        return findContaining(level, pos, null);
+    public static SubLevel findContaining(@Nullable Level level, @Nullable Vec3 pos, double probeRadius) {
+        return findContaining(level, pos, null, probeRadius);
     }
 
-    private static BoundingBox3d probeBox(Vec3 pos) {
+    private static BoundingBox3d probeBox(Vec3 pos, double radius) {
         return new BoundingBox3d(
-                pos.x - PROBE, pos.y - PROBE, pos.z - PROBE,
-                pos.x + PROBE, pos.y + PROBE, pos.z + PROBE);
+                pos.x - radius, pos.y - radius, pos.z - radius,
+                pos.x + radius, pos.y + radius, pos.z + radius);
     }
 }

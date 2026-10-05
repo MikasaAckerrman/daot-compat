@@ -16,6 +16,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.Collections;
+import java.util.Set;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -48,6 +49,8 @@ public final class ThunderSpearClientFollower {
 
     private static final Map<Entity, Tracked> ANCHORS =
             Collections.synchronizedMap(new WeakHashMap<>());
+    private static final Set<Entity> NATIVE_TRACKED =
+            Collections.newSetFromMap(Collections.synchronizedMap(new WeakHashMap<>()));
     private static long tickCounter;
     // Hot-path cache: the first spear entity we meet pins its EntityType; every later entity is
     // filtered by a single reference compare instead of a reflective class check per entity.
@@ -89,12 +92,16 @@ public final class ThunderSpearClientFollower {
                 }
                 anchor = new DynamicHookData(sl.getUniqueId(), local, level.dimension());
                 ANCHORS.put(entity, new Tracked(anchor, pos, tickCounter));
-                // Best effort: hand the spear to Sable's own tracking; when Sable carries it
-                // natively our manual mirror becomes a harmless no-op.
-                SableBridge.setTrackingSubLevel(entity, sl);
+                // Best effort: hand the spear to Sable's own tracking. When Sable carries it
+                // natively, SKIP our manual setPos mirror entirely — Sable's pose interpolation
+                // is frame-perfect, our per-tick write is what made spears "hover".
+                if (SableBridge.setTrackingSubLevel(entity, sl)) {
+                    NATIVE_TRACKED.add(entity);
+                }
                 continue;
             }
             ANCHORS.put(entity, new Tracked(anchor, tracked.lastWorld(), tickCounter));
+            if (NATIVE_TRACKED.contains(entity)) continue; // Sable carries this spear natively
 
             if (!anchor.dimensionKey().equals(level.dimension())) {
                 ANCHORS.remove(entity);
