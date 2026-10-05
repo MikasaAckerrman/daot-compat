@@ -14,6 +14,7 @@ import com.armorberserk.daotcompat.input.RagdollKeybinds;
 import com.armorberserk.daotcompat.network.DaotNetworking;
 import com.armorberserk.daotcompat.ragdoll.RagdollCameraSync;
 import com.armorberserk.daotcompat.ragdoll.RagdollClient;
+import com.armorberserk.daotcompat.ragdoll.RagdollOdmBridge;
 import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import net.minecraft.client.Minecraft;
@@ -97,6 +98,12 @@ public final class DAOTCompat {
                     // Edge-based: consumeClick() fires only on a fresh sneak press, never on hold.
                     while (Minecraft.getInstance().options.keyShift.consumeClick()) {
                         RagdollClient.exit();
+                        break;
+                    }
+                    // ПКМ в рэгдолле = выстрел крюками: сиденье глотает ванильный use,
+                    // поэтому стреляем программно — крюк летит по прицелу и цепляется.
+                    while (Minecraft.getInstance().options.keyUse.consumeClick()) {
+                        RagdollOdmBridge.fireHooksAtCrosshair(player);
                         break;
                     }
                     RagdollClient.stopOdmSounds();
