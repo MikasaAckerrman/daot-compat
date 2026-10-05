@@ -9,6 +9,7 @@ import com.armorberserk.daotcompat.aot.SpearReflect;
 import com.armorberserk.daotcompat.hook.DynamicHookData;
 import com.armorberserk.daotcompat.sable.SableBridge;
 import com.armorberserk.daotcompat.sable.SubLevelResolver;
+import com.armorberserk.daotcompat.util.LogThrottle;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -168,6 +169,7 @@ public final class ThunderSpearFollower {
             return;
         }
         if (pos.distanceToSqr(next) < IDLE_SQR) return; // nothing moved - leave the spear be
+        LogThrottle.info("spear-carry", 2, "spear carried to " + next + " (ship " + anchor.subLevelId() + ")");
         entity.setPos(next.x, next.y, next.z);
 
         // Render-interpolation fix (see class javadoc "Fix 3"). setPos only moved the *current*

@@ -120,6 +120,7 @@ public final class SpearVisualReflect {
                     fixed++;
                 }
             }
+            if (fixed > 0) DAOTCompat.LOGGER.info("[spear-visual] fixed {} abnormal plot-space visual(s)", fixed);
             return fixed;
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("[spear-visual] abnormal fix failed", t);

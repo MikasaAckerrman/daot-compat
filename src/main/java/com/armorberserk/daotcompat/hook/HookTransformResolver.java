@@ -8,6 +8,7 @@ import com.armorberserk.daotcompat.DAOTCompat;
 import com.armorberserk.daotcompat.aot.AOTReflect;
 import com.armorberserk.daotcompat.config.DaotConfig;
 import com.armorberserk.daotcompat.ragdoll.RagdollClient;
+import com.armorberserk.daotcompat.util.LogThrottle;
 import com.armorberserk.daotcompat.sable.SableBridge;
 import com.armorberserk.daotcompat.sable.SubLevelResolver;
 import dev.ryanhcode.sable.sublevel.SubLevel;
@@ -119,6 +120,7 @@ public final class HookTransformResolver {
             }
             if (notFinite(local)) return;
             DynamicHookMap.put(hook, new DynamicHookData(id, local, level.dimension()));
+            DAOTCompat.LOGGER.info("[hook] ANCHORED on sub-level {} at local {}", id, local);
             // Re-hooking in mid-air while ragdolled ends it: the rope caught something solid,
             // so the player is back in control. Live check — works even 10 minutes into a ragdoll.
             if (RagdollClient.isRagdolledLive()) {
@@ -200,7 +202,7 @@ public final class HookTransformResolver {
         }
         AOTReflect.setPosition(hook, next);
         lastAnchorWorldPos = next; // feed the rope-force bridge
-        DAOTCompat.LOGGER.debug("[hook] synchronized to moving sub-level at {}", next);
+        LogThrottle.info("hook-follow", 2, "rope corrected to " + next + " (ship " + anchor.subLevelId() + ")");
     }
 
     /**

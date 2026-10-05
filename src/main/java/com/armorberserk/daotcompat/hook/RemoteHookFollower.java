@@ -7,6 +7,7 @@ package com.armorberserk.daotcompat.hook;
 import com.armorberserk.daotcompat.DAOTCompat;
 import com.armorberserk.daotcompat.aot.RemoteHookReflect;
 import com.armorberserk.daotcompat.sable.SableBridge;
+import com.armorberserk.daotcompat.util.LogThrottle;
 import com.armorberserk.daotcompat.sable.SubLevelResolver;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.resources.ResourceKey;
@@ -137,6 +138,7 @@ public final class RemoteHookFollower {
             // [FIX v1.3.5] Always store result - either found SubLevel or NULL (clears stale anchor)
             // This prevents infinite resync loop when SubLevel becomes temporarily unreachable
             store(anchor, left, sub, local, cur, sub != null ? level.dimension() : null);
+            LogThrottle.info("remote-follow", 3, "remote hook re-anchored: sub=" + sub + " local=" + local);
         }
 
         UUID sub = left ? anchor.leftSub : anchor.rightSub;

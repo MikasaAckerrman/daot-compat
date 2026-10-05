@@ -4,11 +4,13 @@
  */
 package com.armorberserk.daotcompat.spear;
 
+import com.armorberserk.daotcompat.DAOTCompat;
 import com.armorberserk.daotcompat.aot.SpearReflect;
 import com.armorberserk.daotcompat.config.DaotConfig;
 import com.armorberserk.daotcompat.hook.DynamicHookData;
 import com.armorberserk.daotcompat.sable.SableBridge;
 import com.armorberserk.daotcompat.sable.SubLevelResolver;
+import com.armorberserk.daotcompat.util.LogThrottle;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.world.entity.Entity;
@@ -95,9 +97,10 @@ public final class ThunderSpearClientFollower {
                 // Best effort: hand the spear to Sable's own tracking. When Sable carries it
                 // natively, SKIP our manual setPos mirror entirely — Sable's pose interpolation
                 // is frame-perfect, our per-tick write is what made spears "hover".
-                if (SableBridge.setTrackingSubLevel(entity, sl)) {
-                    NATIVE_TRACKED.add(entity);
-                }
+                boolean nativeCarried = SableBridge.setTrackingSubLevel(entity, sl);
+                DAOTCompat.LOGGER.info("[spear-client] anchored on sub-level {}, native carry = {}",
+                        sl.getUniqueId(), nativeCarried);
+                if (nativeCarried) NATIVE_TRACKED.add(entity);
                 continue;
             }
             ANCHORS.put(entity, new Tracked(anchor, tracked.lastWorld(), tickCounter));
@@ -121,12 +124,14 @@ public final class ThunderSpearClientFollower {
             if (notFinite(next) || pos.distanceToSqr(next) < IDLE_SQR) continue;
 
             Vec3 oldWorld = tracked.lastWorld();
+            LogThrottle.info("spear-client-carry", 2, "client spear mirrored to " + next);
             entity.setPos(next.x, next.y, next.z);
             SableBridge.setOldPosNoMovement(entity);
             SpearVisualReflect.carryVisual(entity, oldWorld == null ? pos : oldWorld, next);
             // Plot-world fix: if the tracker spawned the visual at ±20M (plot coords), pull it
             // back to the entity's real client position every tick.
-            SpearVisualReflect.fixAbnormalVisuals(entity, entity.position());
+            int fixedAbnormal = SpearVisualReflect.fixAbnormalVisuals(entity, entity.position());
+            if (fixedAbnormal > 0) DAOTCompat.LOGGER.info("[spear-visual] fixed {} abnormal visual spear(s)", fixedAbnormal);
             ANCHORS.put(entity, new Tracked(anchor, next, tickCounter));
         }
     }
