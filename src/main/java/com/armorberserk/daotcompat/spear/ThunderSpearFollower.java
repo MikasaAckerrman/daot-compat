@@ -135,6 +135,11 @@ public final class ThunderSpearFollower {
             anchor = new DynamicHookData(id, local, level.dimension());
             ANCHORS.put(entity, new TrackedAnchor(anchor, tickCounter));
             LAST_WORLD_POS.put(entity, pos);
+            // Native carry: register the spear into Sable's tracking — server carries the
+            // entity natively and syncs it, fixing both invisibility and hovering client-side.
+            if (SableBridge.setTrackingSubLevel(entity, sl)) {
+                DAOTCompat.LOGGER.info("[spear] NATIVE tracking registered on {}", sl.getUniqueId());
+            }
         } else {
             ANCHORS.put(entity, new TrackedAnchor(anchor, tickCounter));
         }

@@ -57,6 +57,11 @@ public final class DAOTCompat {
         NeoForge.EVENT_BUS.addListener((EntityTickEvent.Pre event) ->
                 ThunderSpearFollower.onTick(event.getEntity()));
 
+        // Диагностика: почему рэгдолл закончился (EXPIRED / RELEASED / PLAYER_DEATH)
+        NeoForge.EVENT_BUS.addListener((dev.leo.sableplayerragdoll.api.RagdollEndEvent event) ->
+                LOGGER.info("[ragdoll] ENDED for {} reason {}", event.player().getGameProfile().getName(),
+                        event.reason()));
+
         // Client: a LOWEST-priority post-client-tick pass catches hooks that AOT fires
         // during its own ClientTickEvent (which runs AFTER LocalPlayer.tick). Correcting
         // here means the rope renders at the visual point, not the raw plot coordinate.

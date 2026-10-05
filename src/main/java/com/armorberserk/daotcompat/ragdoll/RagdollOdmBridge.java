@@ -43,17 +43,33 @@ public final class RagdollOdmBridge {
         mapsResolved = true;
         try {
             Class<?> tickHandler = Class.forName("daot.ODMTickHandler");
-            leftHooksMap = tickHandler.getField("leftHooks").get(null);
-            rightHooksMap = tickHandler.getField("rightHooks").get(null);
+            // КРИТИЧНО: leftHooks/rightHooks — PRIVATE static поля, getField() (только публичные)
+            // молча падал — из-за этого ПКМ-выстрел из рэгдолла не работал вовсе.
+            for (Field f : tickHandler.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers())
+                        && f.getType().getName().contains("Map")) {
+                    f.setAccessible(true);
+                    Object value = f.get(null);
+                    if ("leftHooks".equals(f.getName())) leftHooksMap = value;
+                    if ("rightHooks".equals(f.getName())) rightHooksMap = value;
+                }
+            }
+            if (leftHooksMap == null || rightHooksMap == null) {
+                DAOTCompat.LOGGER.warn("[ragdoll-odm] AOT hook maps not resolved: left={}, right={}",
+                        leftHooksMap, rightHooksMap);
+                return false;
+            }
             for (java.lang.reflect.Method m : leftHooksMap.getClass().getMethods()) {
                 if ("put".equals(m.getName()) && m.getParameterCount() == 2) {
                     mapPut = m;
                     break;
                 }
             }
+            DAOTCompat.LOGGER.info("[ragdoll-odm] hook maps resolved: left={}, right={}, put={}",
+                    leftHooksMap != null, rightHooksMap != null, mapPut != null);
             return mapPut != null;
         } catch (Throwable t) {
-            DAOTCompat.LOGGER.warn("[ragdoll-odm] AOT hook maps not found: {}", t.toString());
+            DAOTCompat.LOGGER.warn("[ragdoll-odm] AOT hook maps resolve failed: {}", t.toString());
             return false;
         }
     }
@@ -78,8 +94,8 @@ public final class RagdollOdmBridge {
 
         boolean any = insertInto(leftHooksMap, player, eye, latchPos)
                 | insertInto(rightHooksMap, player, eye, latchPos);
-        DAOTCompat.LOGGER.info("[ragdoll-odm] hooks fired from ragdoll, latch {} type {}",
-                fmt(latchPos), hit.getType());
+        DAOTCompat.LOGGER.info("[ragdoll-odm] hooks fired from ragdoll: left+right inserted={}, latch {} type {}",
+                any, fmt(latchPos), hit.getType());
         return any;
     }
 
@@ -101,6 +117,7 @@ public final class RagdollOdmBridge {
                 Class<?>[] params = m.getParameterTypes();
                 if (params[0].isAssignableFrom(UUID.class) && params[1].isInstance(hook)) {
                     m.invoke(hooksMap, playerUuid, hook);
+                    DAOTCompat.LOGGER.info("[ragdoll-odm] hook inserted into map {}", hooksMap.getClass().getSimpleName());
                     return true;
                 }
             }
