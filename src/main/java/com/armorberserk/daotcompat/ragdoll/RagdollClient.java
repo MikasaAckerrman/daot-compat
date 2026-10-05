@@ -178,17 +178,16 @@ public final class RagdollClient {
     }
 
     /**
-     * Rope-force bridge, sent every client tick while ragdolled with a sub-level-hook anchored:
-     * the server converges the ragdoll physics body's velocity toward this vector (AOT's rope
-     * pull is already inside the client player's delta movement). This is what makes the ODM
-     * gear actually drag your ragdoll body.
+     * Rope bridge, sent every client tick while ragdolled with a sub-level-hook anchored: the
+     * payload carries the hook's corrected WORLD position. The server pulls the ragdoll physics
+     * body toward that point — this is what makes the ODM gear drag your ragdoll body.
      */
-    public static void sendRopeForce(Vec3 playerMotion) {
+    public static void sendRopeForce(Vec3 anchorWorldPos) {
         if (!enabled() || !isRagdolledLive()) return;
         LocalPlayer player = DAOTCompat.minecraft().player;
         if (player == null) return;
         PacketDistributor.sendToServer(new RagdollTriggerPayload(
-                RagdollTriggerPayload.Action.ROPE_FORCE, playerMotion.x, playerMotion.y, playerMotion.z));
+                RagdollTriggerPayload.Action.ROPE_FORCE, anchorWorldPos.x, anchorWorldPos.y, anchorWorldPos.z));
     }
 
     private static void markRagdollTriggered() {

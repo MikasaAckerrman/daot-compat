@@ -57,6 +57,14 @@ public final class HookTransformResolver {
 
     private HookTransformResolver() {}
 
+    /** World position of the most recent anchored-hook correction (for the rope-force bridge). */
+    private static volatile Vec3 lastAnchorWorldPos;
+
+    @Nullable
+    public static Vec3 getLastAnchorWorldPos() {
+        return lastAnchorWorldPos;
+    }
+
     public static void process(@Nullable Level level, @Nullable Object hook) {
         if (level == null || hook == null || !AOTReflect.isAvailable()) return;
 
@@ -191,6 +199,7 @@ public final class HookTransformResolver {
             return;
         }
         AOTReflect.setPosition(hook, next);
+        lastAnchorWorldPos = next; // feed the rope-force bridge
         DAOTCompat.LOGGER.debug("[hook] synchronized to moving sub-level at {}", next);
     }
 
@@ -244,6 +253,7 @@ public final class HookTransformResolver {
         }
         AOTReflect.release(hook);
         DynamicHookMap.put(hook, null);
+        lastAnchorWorldPos = null; // anchor gone — stop feeding the bridge
     }
 
     private static double sqr(double v) {

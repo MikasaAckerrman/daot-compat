@@ -59,21 +59,9 @@ public final class DaotConfig {
             .defineInRange("ragdollForceStrength", 0.5D, 0.0D, 1.0D);
 
 
-    public static final ModConfigSpec.BooleanValue HOOK_CHORDS_ENABLED = BUILDER
-            .comment("Fire ODM hooks only from chords: hold the modifier key + press the mouse button (left hook = modifier+LMB, right hook = modifier+RMB). While a chord is enabled the plain mouse buttons no longer fire hooks")
-            .define("hookChordsEnabled", true);
-
-    public static final ModConfigSpec.ConfigValue<String> HOOK_MODIFIER_KEY = BUILDER
-            .comment("Keyboard modifier for hook chords: a letter (X = 'Ч' on ЙЦУКЕН), digit, or InputConstants name like 'key.keyboard.left.shift'")
-            .define("hookModifierKey", "X");
-
-    public static final ModConfigSpec.IntValue HOOK_LEFT_MOUSE = BUILDER
-            .comment("Mouse button for the LEFT hook chord: 0 = LMB, 1 = RMB, 2 = MMB")
-            .defineInRange("hookLeftMouse", 0, 0, 7);
-
-    public static final ModConfigSpec.IntValue HOOK_RIGHT_MOUSE = BUILDER
-            .comment("Mouse button for the RIGHT hook chord: 0 = LMB, 1 = RMB, 2 = MMB")
-            .defineInRange("hookRightMouse", 1, 0, 7);
+    public static final ModConfigSpec.DoubleValue RAGDOLL_PULL_SPEED = BUILDER
+            .comment("Ragdoll body pull speed toward the ODM anchor while ragdolled (m/s)")
+            .defineInRange("ragdollPullSpeed", 16.0D, 1.0D, 64.0D);
 
     public static final ModConfigSpec SPEC = BUILDER.build();
 

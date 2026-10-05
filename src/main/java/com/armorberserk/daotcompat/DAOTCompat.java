@@ -18,6 +18,7 @@ import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
@@ -76,9 +77,6 @@ public final class DAOTCompat {
                     HighSpeedSubLevelGuard.tick(player);
                 }
 
-                // Hook chords: left hook = modifier+LMB, right hook = modifier+RMB. Without the
-                // modifier held, AOT's hook keys are forced up — no accidental shots.
-                com.armorberserk.daotcompat.input.HookChords.tick(player);
 
                 // Quick ragdoll exit: drain presses so one tap is one exit request. The server
                 // refuses during a stun window — that is the point of being stunned.
@@ -106,7 +104,8 @@ public final class DAOTCompat {
                     // Rope-force bridge: while a hook is anchored to a sub-level, the ragdoll
                     // body is dragged by the gear's rope pull (makes ODM usable in ragdoll).
                     if (DynamicHookMap.anyAnchored() && DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
-                        RagdollClient.sendRopeForce(player.getDeltaMovement());
+                        Vec3 anchor = HookTransformResolver.getLastAnchorWorldPos();
+                        if (anchor != null) RagdollClient.sendRopeForce(anchor);
                     }
                 } else {
                     // Not ragdolled: drain vanilla sneak clicks so nothing queues up.

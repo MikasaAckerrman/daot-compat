@@ -120,12 +120,13 @@ public final class RagdollLink {
     }
 
     /**
-     * The rope-force bridge that makes the ODM gear usable while ragdolled: the client sends the
-     * velocity its gear logic wants (AOT's rope pull is already inside the client player's delta
-     * movement), and we converge the ragdoll physics body's velocity toward it. Safety: the body
-     * must be a registered ragdoll sub-level — never a ship.
+     * The rope bridge that makes the ODM gear usable while ragdolled. The client reports the
+     * hook's corrected WORLD position; we pull the ragdoll physics body toward that point at
+     * {@code ragdollPullSpeed} (converging its velocity), so the body flies along the rope
+     * trajectory and hangs at the anchor. Safety: the body must be a registered ragdoll
+     * sub-level — never a ship.
      */
-    private static void ropeForce(ServerPlayer player, Vec3 clientMotion) {
+    private static void ropeForce(ServerPlayer player, Vec3 anchorPos) {
         if (!player.isAlive() || !RagdollAPI.isRagdolled(player)) return;
         SubLevel sl = SubLevelResolver.findContaining(player.serverLevel(), player.position());
         if (!(sl instanceof dev.ryanhcode.sable.sublevel.ServerSubLevel serverSubLevel)) return;
@@ -134,15 +135,16 @@ public final class RagdollLink {
             var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(serverSubLevel);
             org.joml.Vector3d current = new org.joml.Vector3d();
             handle.getLinearVelocity(current);
-            // Converge the body velocity toward the intended motion (rope pull already applied
-            // client-side by AOT). Strength is a convergence factor, not a raw impulse.
-            double strength = com.armorberserk.daotcompat.config.DaotConfig.RAGDOLL_FORCE_STRENGTH.get();
-            Vec3 clamped = clamp(clientMotion, MAX_LAUNCH_SPEED);
+            Vec3 toAnchor = anchorPos.subtract(player.position());
+            double dist = toAnchor.length();
+            if (dist < 0.5D) return; // уже у якоря — висим
+            double speed = Math.min(com.armorberserk.daotcompat.config.DaotConfig.RAGDOLL_PULL_SPEED.get(), dist * 20.0D / 10.0D);
+            Vec3 targetVel = toAnchor.normalize().scale(speed);
             // Safety clamp: at most 3 m/s of velocity change per tick, so a bad client value
             // can never fling the physics body into orbit.
-            double dx = org.joml.Math.clamp((clamped.x - current.x) * strength, -3.0, 3.0);
-            double dy = org.joml.Math.clamp((clamped.y - current.y) * strength, -3.0, 3.0);
-            double dz = org.joml.Math.clamp((clamped.z - current.z) * strength, -3.0, 3.0);
+            double dx = org.joml.Math.clamp(targetVel.x - current.x, -3.0, 3.0);
+            double dy = org.joml.Math.clamp(targetVel.y - current.y, -3.0, 3.0);
+            double dz = org.joml.Math.clamp(targetVel.z - current.z, -3.0, 3.0);
             handle.addLinearAndAngularVelocity(new org.joml.Vector3d(dx, dy, dz), new org.joml.Vector3d(0, 0, 0));
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("[ragdoll] rope force failed", t);
