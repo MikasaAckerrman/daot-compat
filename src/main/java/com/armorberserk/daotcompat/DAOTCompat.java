@@ -116,11 +116,17 @@ public final class DAOTCompat {
                     ragdollUseWasDown = useDownNow;
                     RagdollClient.stopOdmSounds();
                     RagdollCameraSync.sync();
-                    // Rope-force bridge: while a hook is anchored to a sub-level, the ragdoll
-                    // body is dragged by the gear's rope pull (makes ODM usable in ragdoll).
-                    if (DynamicHookMap.anyAnchored() && DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
-                        Vec3 anchor = HookTransformResolver.getLastAnchorWorldPos();
-                        if (anchor != null) RagdollClient.sendRopeForce(anchor);
+                    // Rope-force bridge: works for ANY active hook (terrain, ship, whatever).
+                    // Sends the hook position every tick — server pulls the ragdoll body toward it.
+                    if (DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
+                        Vec3 hookPos = null;
+                        if (left != null && AOTReflect.isActive(left)) {
+                            hookPos = AOTReflect.getPosition(left);
+                        }
+                        if (hookPos == null && right != null && AOTReflect.isActive(right)) {
+                            hookPos = AOTReflect.getPosition(right);
+                        }
+                        if (hookPos != null) RagdollClient.sendRopeForce(hookPos);
                     }
                 } else {
                     // Not ragdolled: drain vanilla sneak clicks so nothing queues up.

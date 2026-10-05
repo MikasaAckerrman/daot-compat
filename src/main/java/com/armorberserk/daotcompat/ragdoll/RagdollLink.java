@@ -133,7 +133,7 @@ public final class RagdollLink {
         if (!player.isAlive() || !RagdollAPI.isRagdolled(player)) return;
         SubLevel sl = SubLevelResolver.findContaining(player.serverLevel(), player.position());
         if (!(sl instanceof dev.ryanhcode.sable.sublevel.ServerSubLevel serverSubLevel)) return;
-        if (!RagdollAPI.isRagdollSubLevel(serverSubLevel.getUniqueId())) return;
+        // Любой суб-левел, в котором сидит игрок — работает для кораблей и рэгдоллов
         try {
             var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(serverSubLevel);
             org.joml.Vector3d current = new org.joml.Vector3d();
