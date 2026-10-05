@@ -11,8 +11,10 @@ import com.armorberserk.daotcompat.sable.SableBridge;
 import com.armorberserk.daotcompat.sable.SubLevelResolver;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Collections;
 import java.util.Map;
@@ -110,7 +112,16 @@ public final class ThunderSpearFollower {
         if (anchor == null) {
             SubLevel sl = SubLevelResolver.findContaining(level, pos);
             if (LOGGED.add(entity)) diagnose(level, pos, sl);
-            if (sl == null) return; // stuck in ordinary terrain or a titan - AOT handles those
+            if (sl == null) {
+                // Plot-world recovery: в plot-мирах AOT переносит воткнувшееся копьё в систему
+                // координат корабля (±20 млн блоков), findContaining там ничего не находит.
+                SubLevel plotSl = recoverPlotFrame(level, pos);
+                if (plotSl == null) return; // stuck in ordinary terrain or a titan - AOT handles those
+                anchor = new DynamicHookData(plotSl.getUniqueId(), pos, level.dimension());
+                ANCHORS.put(entity, new TrackedAnchor(anchor, tickCounter));
+                LAST_WORLD_POS.put(entity, plotSl.logicalPose().transformPosition(pos));
+                return;
+            }
             UUID id = sl.getUniqueId();
             if (id == null) return;
             Vec3 local;
@@ -177,6 +188,39 @@ public final class ThunderSpearFollower {
         SableBridge.setOldPosNoMovement(entity);
 
         LAST_WORLD_POS.put(entity, next); // remember for detonation drift log
+    }
+
+    /**
+     * Plot-frame recovery: the spear position is in a ship's plot coordinate space (±20M blocks
+     * in flat plot worlds). Find the sub-level whose pose maps that point back to a sane world
+     * position near an online player, exactly like the hook-side recoverPlotFrame.
+     */
+    @Nullable
+    private static SubLevel recoverPlotFrame(Level level, Vec3 plotPos) {
+        SubLevel best = null;
+        double bestDistSqr = 512.0D * 512.0D;
+        for (Player player : level.players()) {
+            for (SubLevel sl : SableBridge.getAllSubLevels(level)) {
+                if (sl == null || sl.isRemoved()) continue;
+                Vec3 world;
+                try {
+                    world = sl.logicalPose().transformPosition(plotPos);
+                } catch (Throwable t) {
+                    continue;
+                }
+                if (notFinite(world)) continue;
+                double dSqr = world.distanceToSqr(player.position());
+                if (dSqr < bestDistSqr) {
+                    bestDistSqr = dSqr;
+                    best = sl;
+                }
+            }
+        }
+        if (best != null) {
+            DAOTCompat.LOGGER.info("[spear] plot-frame recovered: sublevel={}, distance to nearest player {} blocks",
+                    best.getUniqueId(), String.format(java.util.Locale.ROOT, "%.1f", Math.sqrt(bestDistSqr)));
+        }
+        return best;
     }
 
     /** Fix 2: force-drop spear anchors that have not been confirmed lodged for STALE_TICKS. */

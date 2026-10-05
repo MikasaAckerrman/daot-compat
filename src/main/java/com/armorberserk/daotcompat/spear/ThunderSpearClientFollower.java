@@ -117,6 +117,9 @@ public final class ThunderSpearClientFollower {
             entity.setPos(next.x, next.y, next.z);
             SableBridge.setOldPosNoMovement(entity);
             SpearVisualReflect.carryVisual(entity, oldWorld == null ? pos : oldWorld, next);
+            // Plot-world fix: if the tracker spawned the visual at ±20M (plot coords), pull it
+            // back to the entity's real client position every tick.
+            SpearVisualReflect.fixAbnormalVisuals(entity, entity.position());
             ANCHORS.put(entity, new Tracked(anchor, next, tickCounter));
         }
     }

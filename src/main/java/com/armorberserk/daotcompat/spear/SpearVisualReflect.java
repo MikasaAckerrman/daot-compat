@@ -96,6 +96,37 @@ public final class SpearVisualReflect {
         }
     }
 
+
+    /**
+     * Plot-world fix: AOT's lodge packet carries PLOT-space coordinates (±20M blocks in flat
+     * plot worlds), so the tracker spawns the visual spear far outside the loaded world. Any
+     * lodged visual sitting at an absurd distance is rewritten to the real spear entity's
+     * position every tick — the entity itself is world-synced correctly.
+     */
+    public static int fixAbnormalVisuals(Entity spearEntity, Vec3 correctPos) {
+        if (!ensureProbe()) return 0;
+        try {
+            List<?> spears = (List<?>) activeSpearsField.get(null);
+            if (spears == null) return 0;
+            int fixed = 0;
+            for (Object spear : spears) {
+                if (spear == null) continue;
+                Vec3 visualPos = readPos(spear);
+                if (visualPos == null) continue;
+                if (Math.abs(visualPos.x) > 1_000_000.0D
+                        || Math.abs(visualPos.y) > 1_000_000.0D
+                        || Math.abs(visualPos.z) > 1_000_000.0D) {
+                    writePos(spear, correctPos, correctPos);
+                    fixed++;
+                }
+            }
+            return fixed;
+        } catch (Throwable t) {
+            DAOTCompat.LOGGER.debug("[spear-visual] abnormal fix failed", t);
+            return 0;
+        }
+    }
+
     private static boolean isLodged(Object spear) {
         if (stateField == null) return true; // no state info: match by position only
         try {
