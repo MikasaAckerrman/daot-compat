@@ -5,88 +5,72 @@
 package com.armorberserk.daotcompat.input;
 
 import com.armorberserk.daotcompat.DAOTCompat;
-import com.mojang.blaze3d.platform.InputConstants;
 import com.armorberserk.daotcompat.config.DaotConfig;
+import com.armorberserk.daotcompat.ragdoll.RagdollClient;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.player.LocalPlayer;
 import org.lwjgl.glfw.GLFW;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-
 /**
- * Hook chords: the ODM gear's hooks fire only from key+mouse combinations instead of the plain
- * buttons — left hook on {@code modifier + LMB}, right hook on {@code modifier + RMB} (defaults:
- * modifier = X, i.e. "Ч" on ЙЦУКЕН).
+ * Hook chords: the ODM gear's hooks fire only from key+mouse combinations — left hook on
+ * {@code modifier + LMB}, right hook on {@code modifier + RMB} (defaults: modifier = X, i.e.
+ * "Ч" on ЙЦУКЕН).
  *
- * <p>How it works: AOT's {@code ODMTickHandler} keeps its own {@code leftKey}/{@code rightKey}
- * KeyMappings and reads {@code isDown()} every tick. We force those KeyMappings' private
- * {@code isDown}/{@code clickCount} fields to the chord state each client tick: while the
- * modifier is held, pressing the bound mouse button lights the hook key up; releasing either
- * input puts it down. AOT's own fire mechanics (gas, reeling, dual-hook) run untouched on top.
+ * <p>Mechanism (v2, robust): on probe we REBIND AOT's {@code leftKey}/{@code rightKey}
+ * KeyMappings to {@link InputConstants#UNKNOWN} via their public {@code setKey} — vanilla input
+ * can never set them again (and they stop conflicting with attack/use). Every client tick we
+ * then call their PUBLIC {@code setDown(boolean)} with the chord state. AOT's own per-tick
+ * logic reads {@code isDown()} and runs all of its mechanics (gas, reeling, dual-hook) on top.
  *
- * <p>While the player is ragdolled and STUNNED, both hook keys are forced down=false — a stun
- * suppresses the gear. In an ordinary ragdoll the chords work normally, so you can re-hook
- * mid-ragdoll and swing out of it.
+ * <p>During a STUN both keys are forced down=false — the gear is suppressed. In an ordinary
+ * ragdoll the chords keep working, so you can re-hook mid-ragdoll.
  */
 public final class HookChords {
 
     private static volatile boolean probed;
-    private static Field leftKeyField;
-    private static Field rightKeyField;
-    private static Field isDownField;
-    private static Field clickCountField;
+    private static KeyMapping leftKey;
+    private static KeyMapping rightKey;
     private static boolean leftWasActive;
     private static boolean rightWasActive;
 
     private HookChords() {}
 
-    /** Poll every client tick. Forces AOT's hook keys to the chord state. */
+    /** Poll every client tick. */
     public static void tick(LocalPlayer player) {
         if (!DaotConfig.HOOK_CHORDS_ENABLED.get()) return;
         if (!probe()) return;
 
-        boolean stunned = com.armorberserk.daotcompat.ragdoll.RagdollClient.isStunned();
+        boolean stunned = RagdollClient.isStunned();
         boolean modifierDown = isKeyDown(DaotConfig.HOOK_MODIFIER_KEY.get());
-        int leftMouse = DaotConfig.HOOK_LEFT_MOUSE.get();
-        int rightMouse = DaotConfig.HOOK_RIGHT_MOUSE.get();
+        long window = Minecraft.getInstance().getWindow().getWindow();
 
         boolean leftActive = !stunned && modifierDown
-                && InputConstants.isKeyDown(Minecraft.getInstance().getWindow().getWindow(), leftMouse);
+                && InputConstants.isKeyDown(window, DaotConfig.HOOK_LEFT_MOUSE.get());
         boolean rightActive = !stunned && modifierDown
-                && InputConstants.isKeyDown(Minecraft.getInstance().getWindow().getWindow(), rightMouse);
+                && InputConstants.isKeyDown(window, DaotConfig.HOOK_RIGHT_MOUSE.get());
 
-        force(leftKeyField, leftActive, leftWasActive);
+        if (leftKey.isDown() != leftActive) leftKey.setDown(leftActive);
+        if (rightKey.isDown() != rightActive) rightKey.setDown(rightActive);
         leftWasActive = leftActive;
-        force(rightKeyField, rightActive, rightWasActive);
         rightWasActive = rightActive;
     }
 
-    private static void force(Field keyField, boolean active, boolean wasActive) {
-        try {
-            KeyMapping mapping = (KeyMapping) keyField.get(null);
-            if (mapping == null) return;
-            isDownField.setBoolean(mapping, active);
-            // Mimic a fresh press on the rising edge so any consumeClick()-style consumer sees it.
-            clickCountField.setInt(mapping, active && !wasActive ? 1 : 0);
-        } catch (Throwable ignored) {
-        }
-    }
-
-    private static boolean probe() {
-        if (probed) return leftKeyField != null;
+    private static synchronized boolean probe() {
+        if (probed) return leftKey != null;
         probed = true;
         try {
             Class<?> tickHandler = Class.forName("daot.ODMTickHandler");
-            leftKeyField = tickHandler.getField("leftKey");
-            rightKeyField = tickHandler.getField("rightKey");
-            Class<?> km = KeyMapping.class;
-            isDownField = km.getDeclaredField("isDown");
-            isDownField.setAccessible(true);
-            clickCountField = km.getDeclaredField("clickCount");
-            clickCountField.setAccessible(true);
-            return leftKeyField != null && rightKeyField != null;
+            leftKey = (KeyMapping) tickHandler.getField("leftKey").get(null);
+            rightKey = (KeyMapping) tickHandler.getField("rightKey").get(null);
+            if (leftKey == null || rightKey == null) return false;
+            // Rebind both to UNKNOWN: vanilla input events can never flip them again.
+            InputConstants.Key dead = InputConstants.UNKNOWN;
+            leftKey.setKey(dead);
+            rightKey.setKey(dead);
+            DAOTCompat.LOGGER.info("[chords] AOT hook keys rebound to UNKNOWN — chords take over");
+            return true;
         } catch (Throwable t) {
             DAOTCompat.LOGGER.warn("[chords] AOT hook key fields not found, chords disabled: {}", t.toString());
             return false;
