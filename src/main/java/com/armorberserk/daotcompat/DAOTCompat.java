@@ -76,6 +76,10 @@ public final class DAOTCompat {
                     HighSpeedSubLevelGuard.tick(player);
                 }
 
+                // Hook chords: left hook = modifier+LMB, right hook = modifier+RMB. Without the
+                // modifier held, AOT's hook keys are forced up — no accidental shots.
+                com.armorberserk.daotcompat.input.HookChords.tick(player);
+
                 // Quick ragdoll exit: drain presses so one tap is one exit request. The server
                 // refuses during a stun window — that is the point of being stunned.
                 while (RagdollKeybinds.EXIT_RAGDOLL.consumeClick()) {
@@ -97,13 +101,6 @@ public final class DAOTCompat {
                         RagdollClient.exit();
                         break;
                     }
-                    // ПКМ в рэгдолле = встать: vanilla right-click while seated targets the
-                    // ragdoll seat block, so the gear item never receives it. Swallow the press
-                    // and un-ragdoll instead — the next right click fires the ODM gear normally.
-                    while (Minecraft.getInstance().options.keyUse.consumeClick()) {
-                        RagdollClient.exit();
-                        break;
-                    }
                     RagdollClient.stopOdmSounds();
                     RagdollCameraSync.sync();
                     // Rope-force bridge: while a hook is anchored to a sub-level, the ragdoll
@@ -112,9 +109,8 @@ public final class DAOTCompat {
                         RagdollClient.sendRopeForce(player.getDeltaMovement());
                     }
                 } else {
-                    // Not ragdolled: drain vanilla sneak/use clicks so nothing queues up.
+                    // Not ragdolled: drain vanilla sneak clicks so nothing queues up.
                     Minecraft.getInstance().options.keyShift.consumeClick();
-                    Minecraft.getInstance().options.keyUse.consumeClick();
                 }
                 RagdollClient.tickSoundSuppressionState();
             });
