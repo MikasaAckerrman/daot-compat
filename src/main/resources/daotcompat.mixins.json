@@ -5,7 +5,9 @@
   "compatibilityLevel": "JAVA_21",
   "refmap": "daotcompat.refmap.json",
   "mixins": [],
-  "client": [],
+  "client": [
+    "client.EntityIsPassengerMixin"
+  ],
   "server": [],
   "injectors": {
     "defaultRequire": 0
