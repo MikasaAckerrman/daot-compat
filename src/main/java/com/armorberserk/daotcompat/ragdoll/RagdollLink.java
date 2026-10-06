@@ -92,12 +92,9 @@ public final class RagdollLink {
     private static void trigger(ServerPlayer player, Vec3 velocity) {
         if (!player.isAlive() || RagdollAPI.isRagdolled(player)) return;
         if (onCooldown(player)) return;
-        // autoSeat(false): игрок НЕ пассажир → isPassenger()=false → гейт isPassenger
-        // в AOT ODMTickHandler пройден → УПМ стреляет из рэгдолла
-        RagdollLaunchOptions options = RagdollLaunchOptions.builder()
-                .autoSeat(false)
-                .build();
-        RagdollAPI.launch(player, clamp(velocity, MAX_LAUNCH_SPEED), options);
+        // autoSeat(true) (дефолт): игрок сидит на теле рэгдолла → позиции синхронизированы.
+        // Гейт isPassenger в AOT обходится через EntityIsPassengerMixin (client-side).
+        RagdollAPI.launch(player, clamp(velocity, MAX_LAUNCH_SPEED));
         DAOTCompat.LOGGER.info("[ragdoll] launched for {} at {} m/s",
                 player.getGameProfile().getName(),
                 String.format(java.util.Locale.ROOT, "%.1f", velocity.length()));

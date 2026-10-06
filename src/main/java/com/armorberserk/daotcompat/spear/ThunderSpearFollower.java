@@ -120,7 +120,14 @@ public final class ThunderSpearFollower {
                 if (plotSl == null) return; // stuck in ordinary terrain or a titan - AOT handles those
                 anchor = new DynamicHookData(plotSl.getUniqueId(), pos, level.dimension());
                 ANCHORS.put(entity, new TrackedAnchor(anchor, tickCounter));
-                LAST_WORLD_POS.put(entity, plotSl.logicalPose().transformPosition(pos));
+                Vec3 world = plotSl.logicalPose().transformPosition(pos);
+                LAST_WORLD_POS.put(entity, world);
+                // Телепортируем сущность из plot-пространства в мировые координаты — setPos
+                // недостаточно для синхронизации клиента при скачке с 20M координат.
+                entity.teleportTo(world.x, world.y, world.z);
+                SableBridge.setOldPosNoMovement(entity);
+                DAOTCompat.LOGGER.info("[spear] plot-teleport: entity moved from {} to {}",
+                        fmt(pos), fmt(world));
                 return;
             }
             UUID id = sl.getUniqueId();
