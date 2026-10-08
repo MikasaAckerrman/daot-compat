@@ -11,6 +11,7 @@ group = mod_group_id
 
 repositories {
     mavenLocal()
+    mavenCentral()
     flatDir { dirs 'libs' }
 }
 
@@ -60,6 +61,9 @@ dependencies {
     compileOnly files('libs/create-1.21.1-6.0.10.jar')
     // Sable: Ragdolls — ragdoll bridge (optional at runtime, guarded by RagdollLink)
     compileOnly files('libs/sable_player_ragdoll-1.21.1-0.7.5.jar')
+    // Log4j2 core — the game's own logging backend (2.22.1 in the instance); the telemetry
+    // log tap is a programmatic appender on the root logger.
+    compileOnly 'org.apache.logging.log4j:log4j-core:2.22.1'
 }
 
 var generateModMetadata = tasks.register("generateModMetadata", ProcessResources) {

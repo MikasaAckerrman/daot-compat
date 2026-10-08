@@ -127,9 +127,17 @@ public final class RagdollLink {
      * sub-level — never a ship.
      */
     private static void ropeForce(ServerPlayer player, Vec3 anchorPos) {
-        if (!player.isAlive() || !RagdollAPI.isRagdolled(player)) return;
+        if (!player.isAlive() || !RagdollAPI.isRagdolled(player)) {
+            com.armorberserk.daotcompat.util.LogThrottle.info("rope-force-skip", 10,
+                    "skipped: player not ragdolled (session already ended?)");
+            return;
+        }
         SubLevel sl = SubLevelResolver.findContaining(player.serverLevel(), player.position());
-        if (!(sl instanceof dev.ryanhcode.sable.sublevel.ServerSubLevel serverSubLevel)) return;
+        if (!(sl instanceof dev.ryanhcode.sable.sublevel.ServerSubLevel serverSubLevel)) {
+            com.armorberserk.daotcompat.util.LogThrottle.info("rope-force-skip", 10,
+                    "skipped: no ragdoll sub-level found at player pos " + fmt(player.position()));
+            return;
+        }
         // Любой суб-левел, в котором сидит игрок — работает для кораблей и рэгдоллов
         try {
             var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(serverSubLevel);
@@ -146,9 +154,17 @@ public final class RagdollLink {
             double dy = org.joml.Math.clamp(targetVel.y - current.y, -3.0, 3.0);
             double dz = org.joml.Math.clamp(targetVel.z - current.z, -3.0, 3.0);
             handle.addLinearAndAngularVelocity(new org.joml.Vector3d(dx, dy, dz), new org.joml.Vector3d(0, 0, 0));
+            com.armorberserk.daotcompat.util.LogThrottle.info("rope-force", 2,
+                    String.format(java.util.Locale.ROOT,
+                            "dist=%.1f vel=(%.1f,%.1f,%.1f) pull=(%.1f,%.1f,%.1f)",
+                            dist, current.x, current.y, current.z, dx, dy, dz));
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("[ragdoll] rope force failed", t);
         }
+    }
+
+    private static String fmt(Vec3 v) {
+        return String.format(java.util.Locale.ROOT, "(%.1f, %.1f, %.1f)", v.x, v.y, v.z);
     }
 
     private static boolean onCooldown(ServerPlayer player) {

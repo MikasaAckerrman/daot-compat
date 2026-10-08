@@ -164,6 +164,11 @@ public final class RagdollClient {
         }
     }
 
+    /** Whether ODM sound suppression is currently holding (for the telemetry snapshot). */
+    public static boolean isSoundSuppressionActive() {
+        return soundSuppressionActive;
+    }
+
     /** Ask the server to release the current ragdoll session immediately. */
     public static void exit() {
         LocalPlayer player = DAOTCompat.minecraft().player;

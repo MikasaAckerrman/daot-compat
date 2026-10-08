@@ -1,5 +1,6 @@
 {
   "key.categories.daotcompat": "DAOT Aeronautics Compat",
   "key.daotcompat.exit_ragdoll": "Quick Exit Ragdoll",
-  "key.daotcompat.release_ropes": "Release ODM Ropes"
+  "key.daotcompat.release_ropes": "Release ODM Ropes",
+  "key.daotcompat.telemetry_overlay": "Toggle In-Game Log Overlay"
 }

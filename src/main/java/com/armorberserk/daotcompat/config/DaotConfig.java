@@ -63,6 +63,18 @@ public final class DaotConfig {
             .comment("Ragdoll body pull speed toward the ODM anchor while ragdolled (m/s)")
             .defineInRange("ragdollPullSpeed", 16.0D, 1.0D, 64.0D);
 
+    public static final ModConfigSpec.DoubleValue RAGDOLL_ARRIVE_RADIUS = BUILDER
+            .comment("Distance (blocks) between the ragdoll body and the ODM anchor at which the ragdoll auto-exits (the player is back in control)")
+            .defineInRange("ragdollArriveRadius", 3.0D, 0.5D, 16.0D);
+
+    public static final ModConfigSpec.BooleanValue TELEMETRY_ENABLED = BUILDER
+            .comment("Live telemetry: in-game log overlay (F6) + localhost HTTP endpoint + logs/daotcompat-live.json")
+            .define("telemetryEnabled", true);
+
+    public static final ModConfigSpec.IntValue TELEMETRY_PORT = BUILDER
+            .comment("Port for the localhost-only telemetry endpoint (127.0.0.1, never exposed to the network)")
+            .defineInRange("telemetryPort", 27415, 1024, 65535);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     private DaotConfig() {}

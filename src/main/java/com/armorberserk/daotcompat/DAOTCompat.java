@@ -17,6 +17,10 @@ import com.armorberserk.daotcompat.ragdoll.RagdollClient;
 import com.armorberserk.daotcompat.ragdoll.RagdollOdmBridge;
 import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
+import com.armorberserk.daotcompat.telemetry.InGameLogOverlay;
+import com.armorberserk.daotcompat.telemetry.LiveState;
+import com.armorberserk.daotcompat.telemetry.LogTap;
+import com.armorberserk.daotcompat.telemetry.TelemetryServer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.phys.Vec3;
@@ -48,6 +52,7 @@ public final class DAOTCompat {
 
     public static final String MOD_ID = "daotcompat";
     private static boolean ragdollUseWasDown;
+    private static boolean arriveExitRequested;
     public static final Logger LOGGER = LoggerFactory.getLogger("DAOT Compat");
 
     public DAOTCompat(IEventBus modBus, ModContainer container) {
@@ -68,9 +73,17 @@ public final class DAOTCompat {
         // here means the rope renders at the visual point, not the raw plot coordinate.
         if (FMLEnvironment.dist.isClient()) {
             modBus.addListener(RagdollKeybinds::onRegisterKeyMappings);
+            modBus.addListener(InGameLogOverlay::onRegisterKeyMappings);
+            modBus.addListener(InGameLogOverlay::onRegisterGuiLayers);
+            // Log tap first: from here on every log line is visible in the HUD overlay
+            // and on the localhost telemetry endpoint while the game runs.
+            LogTap.attach();
             NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, (ClientTickEvent.Post event) -> {
                 LocalPlayer player = Minecraft.getInstance().player;
                 if (player == null) return;
+
+                // Telemetry endpoint starts on the first tick, after configs are loaded.
+                TelemetryServer.start();
 
                 RemoteHookFollower.tick(player.level());
                 Object left = AOTReflect.getLeftHook();
@@ -100,7 +113,8 @@ public final class DAOTCompat {
                 // does NOT — ODM uses Shift for reel-in, so a held Shift must not kick the player
                 // out of the ragdoll), the looping ODM gear sound is suppressed every tick, and
                 // the ragdoll camera follows the player's current F5 perspective.
-                if (RagdollClient.isRagdolledLive()) {
+                boolean ragdolled = RagdollClient.isRagdolledLive();
+                if (ragdolled) {
                     // Edge-based: consumeClick() fires only on a fresh sneak press, never on hold.
                     while (Minecraft.getInstance().options.keyShift.consumeClick()) {
                         RagdollClient.exit();
@@ -118,29 +132,49 @@ public final class DAOTCompat {
                     RagdollCameraSync.sync();
                     // Rope-force bridge: works for ANY active hook (terrain, ship, whatever).
                     // Sends the hook position every tick — server pulls the ragdoll body toward it.
+                    Vec3 ropeAnchor = null;
                     if (DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
-                        Vec3 hookPos = null;
                         if (left != null && AOTReflect.isActive(left)) {
-                            hookPos = AOTReflect.getPosition(left);
+                            ropeAnchor = AOTReflect.getPosition(left);
                         }
-                        if (hookPos == null && right != null && AOTReflect.isActive(right)) {
-                            hookPos = AOTReflect.getPosition(right);
+                        if (ropeAnchor == null && right != null && AOTReflect.isActive(right)) {
+                            ropeAnchor = AOTReflect.getPosition(right);
                         }
-                        if (hookPos != null) RagdollClient.sendRopeForce(hookPos);
+                        if (ropeAnchor != null) RagdollClient.sendRopeForce(ropeAnchor);
+                    }
+                    // v1.4.0: exit when the BODY ARRIVES at the anchor, not when the hook latches.
+                    // The old instant-exit-on-anchor killed the ragdoll within the same tick, so
+                    // rope-force never pulled anything and the body tumbled on its own trajectory.
+                    // One EXIT request per ragdoll session — the server needs a tick to apply it.
+                    if (!arriveExitRequested && ropeAnchor != null && player.position().distanceToSqr(ropeAnchor)
+                            < sqr(DaotConfig.RAGDOLL_ARRIVE_RADIUS.get())) {
+                        arriveExitRequested = true;
+                        RagdollClient.exit();
+                        LOGGER.info("[ragdoll] body arrived at the anchor -> exiting ragdoll");
                     }
                 } else {
                     // Not ragdolled: drain vanilla sneak clicks so nothing queues up.
+                    arriveExitRequested = false;
                     Minecraft.getInstance().options.keyShift.consumeClick();
                 }
                 RagdollClient.tickSoundSuppressionState();
+
+                // Telemetry: F6 overlay edge-detect, per-tick live snapshot, throttled file dump.
+                InGameLogOverlay.tick();
+                LiveState.capture(player, left, right, ragdolled);
+                TelemetryServer.tickFileDump();
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.1.0: attach fixes + spear visuals + ragdoll link)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.4.0: telemetry + in-game log overlay + ragdoll rope-pull exit)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */
     public static Minecraft minecraft() {
         return Minecraft.getInstance();
+    }
+
+    private static double sqr(double v) {
+        return v * v;
     }
 }

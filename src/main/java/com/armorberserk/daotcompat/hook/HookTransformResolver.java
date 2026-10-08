@@ -121,12 +121,19 @@ public final class HookTransformResolver {
             if (notFinite(local)) return;
             DynamicHookMap.put(hook, new DynamicHookData(id, local, level.dimension()));
             DAOTCompat.LOGGER.info("[hook] ANCHORED on sub-level {} at local {}", id, local);
-            // Re-hooking in mid-air while ragdolled ends it: the rope caught something solid,
-            // so the player is back in control. Live check — works even 10 minutes into a ragdoll.
+            // v1.4.0: while the rope-force bridge is enabled a re-hook mid-ragdoll no longer
+            // exits instantly — ROPE_FORCE pulls the ragdoll body to the anchor first, and the
+            // post-tick pass exits once the body arrives (ragdollArriveRadius). The old
+            // instant-exit released the body within the same tick, so it tumbled on its own
+            // trajectory while the (invisible) player hung on the rope — the reported bug.
             if (RagdollClient.isRagdolledLive()) {
-                RagdollClient.clearRagdollWindow();
-                RagdollClient.exit();
-                DAOTCompat.LOGGER.info("[hook] re-hooked in air while ragdolled -> exiting ragdoll");
+                if (DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
+                    DAOTCompat.LOGGER.info("[hook] re-hooked while ragdolled -> rope-force holds the ragdoll until the body arrives");
+                } else {
+                    RagdollClient.clearRagdollWindow();
+                    RagdollClient.exit();
+                    DAOTCompat.LOGGER.info("[hook] re-hooked in air while ragdolled -> exiting ragdoll (rope-force disabled)");
+                }
             }
             return;
         }
