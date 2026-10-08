@@ -66,6 +66,10 @@ public final class DaotConfig {
             .comment("Port for the localhost-only telemetry endpoint (127.0.0.1, never exposed to the network)")
             .defineInRange("telemetryPort", 27415, 1024, 65535);
 
+    public static final ModConfigSpec.BooleanValue TELEMETRY_CONTROL = BUILDER
+            .comment("Allow the localhost telemetry endpoint to control the game: press keys (incl. AOT hooks), aim, run commands. Every action is logged; 127.0.0.1 only")
+            .define("telemetryControl", true);
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     private DaotConfig() {}

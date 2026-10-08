@@ -15,7 +15,9 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.Executors;
+import org.jetbrains.annotations.Nullable;
 
 /**
  * The developer's window into a running game: a localhost-only HTTP endpoint plus a periodic
@@ -68,6 +70,10 @@ public final class TelemetryServer {
             http.createContext("/health", ex -> safeHandle(ex, TelemetryServer::handleHealth));
             http.createContext("/shot", ex -> safeHandleBytes(ex, TelemetryServer::handleShot));
             http.createContext("/shot/last", ex -> safeHandleBytes(ex, TelemetryServer::handleLastShot));
+            http.createContext("/control/keys", ex -> safeHandle(ex, TelemetryServer::handleControlKeys));
+            http.createContext("/control/input", ex -> safeHandle(ex, TelemetryServer::handleControlInput));
+            http.createContext("/control/look", ex -> safeHandle(ex, TelemetryServer::handleControlLook));
+            http.createContext("/control/cmd", ex -> safeHandle(ex, TelemetryServer::handleControlCmd));
             http.start();
             server = http;
             DAOTCompat.LOGGER.info("[telemetry] live at http://127.0.0.1:{}/state (logs: /events, file: logs/daotcompat-live.json)", port);
@@ -110,25 +116,97 @@ public final class TelemetryServer {
     }
 
     private static String handleEvents(HttpExchange ex) {
-        String query = ex.getRequestURI().getRawQuery();
-        int limit = 200;
-        boolean daotOnly = false;
-        if (query != null) {
-            for (String pair : query.split("&")) {
-                int eq = pair.indexOf('=');
-                String key = eq < 0 ? pair : pair.substring(0, eq);
-                String val = eq < 0 ? "" : pair.substring(eq + 1);
-                if ("limit".equals(key)) {
-                    try {
-                        limit = Math.max(1, Math.min(1200, Integer.parseInt(val)));
-                    } catch (NumberFormatException ignored) {
-                    }
-                } else if ("filter".equals(key)) {
-                    daotOnly = val.contains("daot");
-                }
+        String query = rawQuery(ex);
+        int limit = intParam(query, "limit", 200);
+        boolean daotOnly = query != null && query.contains("filter=daot");
+        return LogTap.toJson(Math.max(1, Math.min(1200, limit)), daotOnly);
+    }
+
+    // --- Control endpoints: the agent's hands (gated by telemetryControl, localhost only) ---
+
+    private static String handleControlKeys(HttpExchange ex) {
+        StringBuilder b = new StringBuilder(256);
+        b.append("{\"count\":").append(ControlBridge.keyNames().size()).append(",\"keys\":[");
+        List<String> names = ControlBridge.keyNames();
+        for (int i = 0; i < names.size(); i++) {
+            if (i > 0) b.append(',');
+            b.append('"').append(Json.esc(names.get(i))).append('"');
+        }
+        b.append("]}");
+        return b.toString();
+    }
+
+    private static String handleControlInput(HttpExchange ex) {
+        String query = rawQuery(ex);
+        String key = param(query, "key");
+        if (key == null || key.isBlank()) return "{\"error\":\"missing ?key= (see /control/keys)\"}";
+        Boolean down = switch (param(query, "down")) {
+            case "true" -> Boolean.TRUE;
+            case "false" -> Boolean.FALSE;
+            default -> null;
+        };
+        int ticks = intParam(query, "ticks", down == Boolean.FALSE ? 0 : 1);
+        return ControlBridge.press(key, ticks, down);
+    }
+
+    private static String handleControlLook(HttpExchange ex) {
+        String query = rawQuery(ex);
+        Float yaw = floatParam(query, "yaw");
+        Float pitch = floatParam(query, "pitch");
+        if (yaw == null || pitch == null) return "{\"error\":\"missing ?yaw=&pitch=\"}";
+        return ControlBridge.look(yaw, pitch);
+    }
+
+    private static String handleControlCmd(HttpExchange ex) {
+        String cmd = param(rawQuery(ex), "c");
+        if (cmd == null) return "{\"error\":\"missing ?c=<command>\"}";
+        return ControlBridge.command(cmd);
+    }
+
+    // --- query-param helpers ---
+
+    @Nullable
+    private static String rawQuery(HttpExchange ex) {
+        String q = ex.getRequestURI().getRawQuery();
+        return q == null ? "" : q;
+    }
+
+    @Nullable
+    private static String param(@Nullable String query, String name) {
+        if (query == null || query.isBlank()) return null;
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            String key = eq < 0 ? pair : pair.substring(0, eq);
+            if (!key.equals(name)) continue;
+            String val = eq < 0 ? "" : pair.substring(eq + 1);
+            try {
+                return java.net.URLDecoder.decode(val, java.nio.charset.StandardCharsets.UTF_8);
+            } catch (IllegalArgumentException e) {
+                return val;
             }
         }
-        return LogTap.toJson(limit, daotOnly);
+        return null;
+    }
+
+    private static int intParam(@Nullable String query, String name, int fallback) {
+        String v = param(query, name);
+        if (v == null) return fallback;
+        try {
+            return Integer.parseInt(v.trim());
+        } catch (NumberFormatException e) {
+            return fallback;
+        }
+    }
+
+    @Nullable
+    private static Float floatParam(@Nullable String query, String name) {
+        String v = param(query, name);
+        if (v == null) return null;
+        try {
+            return Float.parseFloat(v.trim());
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static String handleHealth(HttpExchange ex) {
@@ -210,7 +288,7 @@ public final class TelemetryServer {
     }
 
     private static String jarVersion() {
-        return "1.2.5";
+        return "1.2.6";
     }
 
     private static void respond(HttpExchange ex, int code, String body) {

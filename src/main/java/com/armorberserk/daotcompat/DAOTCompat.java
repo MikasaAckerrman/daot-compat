@@ -217,14 +217,16 @@ public final class DAOTCompat {
                 prevLeftRetracting = lRetracting;
                 prevRightRetracting = rRetracting;
 
-                // Telemetry: F6 overlay edge-detect, per-tick live snapshot, throttled file dump.
+                // Telemetry: F6 overlay edge-detect, per-tick live snapshot, throttled file dump,
+                // control-bridge key releases.
                 InGameLogOverlay.tick();
                 LiveState.capture(player, left, right, ragdolled, ragdollWorld);
                 TelemetryServer.tickFileDump();
+                com.armorberserk.daotcompat.telemetry.ControlBridge.tick();
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.7.0: RECOVER edge-latch, titan wire-break -> ragdoll, event screenshots + /shot)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.8.0: agent control bridge — press keys / aim / commands via localhost)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */
