@@ -9,6 +9,7 @@ import com.armorberserk.daotcompat.aot.AOTReflect;
 import com.armorberserk.daotcompat.config.DaotConfig;
 import com.armorberserk.daotcompat.hook.HookTransformResolver;
 import com.armorberserk.daotcompat.ragdoll.RagdollClient;
+import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
@@ -46,10 +47,16 @@ public final class LiveState {
     @Nullable
     private static volatile Vec3 anchorPos;
 
+    // The ragdoll body projected into world space (null = not tracked this tick), and how far
+    // the (invisible) player entity hangs off it — THE visual-mismatch metric.
+    @Nullable
+    private static volatile Vec3 ragdollWorldPos;
+    private static volatile double ragdollDist = -1.0D;
+
     private LiveState() {}
 
     public static void capture(LocalPlayer player, @Nullable Object leftHook, @Nullable Object rightHook,
-                               boolean ragdolled) {
+                               boolean ragdolled, @Nullable Vec3 ragdollWorld) {
         capturedAtMs = System.currentTimeMillis();
         gameTick = player.level().getGameTime();
         fps = DAOTCompat.minecraft().getFps();
@@ -59,6 +66,8 @@ public final class LiveState {
 
         Vec3 pos = player.position();
         playerX = pos.x; playerY = pos.y; playerZ = pos.z;
+        ragdollWorldPos = ragdollWorld;
+        ragdollDist = ragdollWorld != null ? pos.distanceTo(ragdollWorld) : -1.0D;
         Vec3 vel = player.getDeltaMovement();
         velX = vel.x; velY = vel.y; velZ = vel.z;
         dimension = player.level().dimension().location().toString();
@@ -103,12 +112,32 @@ public final class LiveState {
                 .append(",\"forceEnabled\":").append(DaotConfig.RAGDOLL_FORCE_ENABLED.get())
                 .append(",\"pullSpeed\":").append(Json.n(DaotConfig.RAGDOLL_PULL_SPEED.get()))
                 .append(",\"arriveRadius\":").append(Json.n(DaotConfig.RAGDOLL_ARRIVE_RADIUS.get()))
+                .append(",\"bodyGlue\":").append(DaotConfig.RAGDOLL_BODY_GLUE.get())
+                .append(",\"worldPos\":").append(vecJson(ragdollWorldPos))
+                .append(",\"distPlayerToBody\":").append(ragdollDist >= 0.0D ? Json.n(ragdollDist) : "null")
                 .append("}");
         b.append(",\"hooks\":{\"left\":").append(vecJson(leftHookPos))
                 .append(",\"right\":").append(vecJson(rightHookPos))
                 .append(",\"anchor\":").append(vecJson(anchorPos))
                 .append("}");
+        b.append(",\"spears\":").append(spearsJson());
         b.append('}');
+        return b.toString();
+    }
+
+    private static String spearsJson() {
+        var spears = ThunderSpearClientFollower.snapshot();
+        StringBuilder b = new StringBuilder(32 + spears.size() * 64);
+        b.append('[');
+        for (int i = 0; i < spears.size(); i++) {
+            ThunderSpearClientFollower.TrackedSpear s = spears.get(i);
+            if (i > 0) b.append(',');
+            b.append("{\"id\":").append(s.entityId())
+                    .append(",\"pos\":").append(vecJson(s.pos()))
+                    .append(",\"native\":").append(s.nativeCarried())
+                    .append('}');
+        }
+        b.append(']');
         return b.toString();
     }
 
@@ -137,4 +166,6 @@ public final class LiveState {
     @Nullable public static Vec3 leftHookPos() { return leftHookPos; }
     @Nullable public static Vec3 rightHookPos() { return rightHookPos; }
     @Nullable public static Vec3 anchorPos() { return anchorPos; }
+    @Nullable public static Vec3 ragdollWorldPos() { return ragdollWorldPos; }
+    public static double ragdollDist() { return ragdollDist; }
 }

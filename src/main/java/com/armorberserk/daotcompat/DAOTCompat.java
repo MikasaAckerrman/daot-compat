@@ -15,6 +15,7 @@ import com.armorberserk.daotcompat.network.DaotNetworking;
 import com.armorberserk.daotcompat.ragdoll.RagdollCameraSync;
 import com.armorberserk.daotcompat.ragdoll.RagdollClient;
 import com.armorberserk.daotcompat.ragdoll.RagdollOdmBridge;
+import com.armorberserk.daotcompat.ragdoll.RagdollWorldTracker;
 import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import com.armorberserk.daotcompat.telemetry.InGameLogOverlay;
@@ -114,6 +115,9 @@ public final class DAOTCompat {
                 // out of the ragdoll), the looping ODM gear sound is suppressed every tick, and
                 // the ragdoll camera follows the player's current F5 perspective.
                 boolean ragdolled = RagdollClient.isRagdolledLive();
+                // Ragdoll body projected into world space (null unless tracked this tick) —
+                // computed inside the ragdoll block, consumed by telemetry below.
+                Vec3 ragdollWorld = null;
                 if (ragdolled) {
                     // Edge-based: consumeClick() fires only on a fresh sneak press, never on hold.
                     while (Minecraft.getInstance().options.keyShift.consumeClick()) {
@@ -130,6 +134,24 @@ public final class DAOTCompat {
                     ragdollUseWasDown = useDownNow;
                     RagdollClient.stopOdmSounds();
                     RagdollCameraSync.sync();
+
+                    // Project the ragdoll body into world space (seat plot pos -> sub-level pose).
+                    // While ragdolled everything visual hangs off the PLAYER entity — AOT ropes,
+                    // the F5 camera — and the ragdoll mod keeps that entity as a separate
+                    // invisible body. The optional glue snaps it onto the ragdoll every tick.
+                    if (player.getVehicle() != null) {
+                        ragdollWorld = RagdollWorldTracker.seatWorldPos(
+                                player.level(), player.getVehicle().position(), player.position());
+                    }
+                    if (DaotConfig.RAGDOLL_BODY_GLUE.get() && ragdollWorld != null) {
+                        double glueDelta = player.position().distanceTo(ragdollWorld);
+                        if (glueDelta > 0.25D) {
+                            player.setPos(ragdollWorld.x, ragdollWorld.y, ragdollWorld.z);
+                            com.armorberserk.daotcompat.util.LogThrottle.info("ragdoll-glue", 2,
+                                    String.format(java.util.Locale.ROOT,
+                                            "player snapped onto ragdoll body (delta was %.1f blocks)", glueDelta));
+                        }
+                    }
                     // Rope-force bridge: works for ANY active hook (terrain, ship, whatever).
                     // Sends the hook position every tick — server pulls the ragdoll body toward it.
                     Vec3 ropeAnchor = null;
@@ -161,12 +183,12 @@ public final class DAOTCompat {
 
                 // Telemetry: F6 overlay edge-detect, per-tick live snapshot, throttled file dump.
                 InGameLogOverlay.tick();
-                LiveState.capture(player, left, right, ragdolled);
+                LiveState.capture(player, left, right, ragdolled, ragdollWorld);
                 TelemetryServer.tickFileDump();
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.4.0: telemetry + in-game log overlay + ragdoll rope-pull exit)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.4.1: live telemetry + ragdoll body glue (config) + rope-force body lookup)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */

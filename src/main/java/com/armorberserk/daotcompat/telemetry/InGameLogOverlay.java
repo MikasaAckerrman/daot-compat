@@ -124,12 +124,12 @@ public final class InGameLogOverlay {
     }
 
     private static String statusLine() {
-        String veh = LiveState.vehicleDist() >= 0.0D
-                ? LiveState.vehicleType() + " d=" + f(LiveState.vehicleDist())
-                : "none";
-        return "LOG[" + mode + "] ragdoll=" + (LiveState.ragdolledLive() ? "LIVE" : "no")
+        String rag = LiveState.ragdollDist() >= 0.0D
+                ? "rag d=" + f(LiveState.ragdollDist())
+                : "rag (-)";
+        return "LOG[" + mode + "] " + (LiveState.ragdolledLive() ? "RAGDOLL " : "") + rag
                 + " stun=" + (LiveState.stunned() ? "YES" : "no")
-                + " seat=" + veh;
+                + (LiveState.vehicleDist() >= 0.0D ? " seat=" + LiveState.vehicleType() : "");
     }
 
     private static String posLine() {

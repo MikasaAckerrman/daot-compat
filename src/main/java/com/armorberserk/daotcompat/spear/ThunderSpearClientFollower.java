@@ -142,6 +142,23 @@ public final class ThunderSpearClientFollower {
         }
     }
 
+    /** One currently tracked lodged spear, for the telemetry snapshot. */
+    public record TrackedSpear(int entityId, Vec3 pos, boolean nativeCarried) {}
+
+    /** Live list of lodged spears this follower is carrying (client-side). */
+    public static java.util.List<TrackedSpear> snapshot() {
+        java.util.List<TrackedSpear> out = new java.util.ArrayList<>();
+        synchronized (ANCHORS) {
+            for (Map.Entry<Entity, Tracked> e : ANCHORS.entrySet()) {
+                Entity ent = e.getKey();
+                Tracked t = e.getValue();
+                if (ent == null || t == null || ent.isRemoved()) continue;
+                out.add(new TrackedSpear(ent.getId(), t.lastWorld(), NATIVE_TRACKED.contains(ent)));
+            }
+        }
+        return out;
+    }
+
     private static boolean notFinite(Vec3 v) {
         return !Double.isFinite(v.x) || !Double.isFinite(v.y) || !Double.isFinite(v.z);
     }

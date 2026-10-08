@@ -67,6 +67,10 @@ public final class DaotConfig {
             .comment("Distance (blocks) between the ragdoll body and the ODM anchor at which the ragdoll auto-exits (the player is back in control)")
             .defineInRange("ragdollArriveRadius", 3.0D, 0.5D, 16.0D);
 
+    public static final ModConfigSpec.BooleanValue RAGDOLL_BODY_GLUE = BUILDER
+            .comment("EXPERIMENTAL: snap the (invisible) player entity onto the ragdoll body's world position every tick while ragdolled — ropes and the F5 camera then hang off the ragdoll instead of a floating invisible body. Toggle live: the client config hot-reloads.")
+            .define("ragdollBodyGlue", false);
+
     public static final ModConfigSpec.BooleanValue TELEMETRY_ENABLED = BUILDER
             .comment("Live telemetry: in-game log overlay (F6) + localhost HTTP endpoint + logs/daotcompat-live.json")
             .define("telemetryEnabled", true);
