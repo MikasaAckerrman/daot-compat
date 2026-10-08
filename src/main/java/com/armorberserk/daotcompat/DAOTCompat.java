@@ -94,6 +94,7 @@ public final class DAOTCompat {
             modBus.addListener(RagdollKeybinds::onRegisterKeyMappings);
             modBus.addListener(InGameLogOverlay::onRegisterKeyMappings);
             modBus.addListener(InGameLogOverlay::onRegisterGuiLayers);
+            modBus.addListener(com.armorberserk.daotcompat.telemetry.TransitionBlink::onRegisterGuiLayers);
             // Log tap first: from here on every log line is visible in the HUD overlay
             // and on the localhost telemetry endpoint while the game runs.
             LogTap.attach();
@@ -166,6 +167,8 @@ public final class DAOTCompat {
 
                 if (ragdolled) {
                     if (!wasRagdolled) {
+                        // Transition INTO the ragdoll (crash): blink + a frame for the record.
+                        com.armorberserk.daotcompat.telemetry.TransitionBlink.begin(true);
                         ScreenCapture.capture("ragdoll");
                     }
                     // The ragdoll body's projected world position (nearest sub-level to the
@@ -235,6 +238,11 @@ public final class DAOTCompat {
                     }
                     RagdollCameraSync.sync();
                 } else {
+                    if (wasRagdolled) {
+                        // Transition OUT of the ragdoll (smooth recover / rest / X): blink.
+                        com.armorberserk.daotcompat.telemetry.TransitionBlink.begin(false);
+                        ScreenCapture.capture("recover");
+                    }
                     restTicks = 0;
                     flightStableTicks = 0;
                     recoverWaitTicks = 0;
@@ -259,7 +267,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.1.0: smooth ragdoll->pilot transition — body converges, detaches, rises into the flight)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.1.1: eyelid-blink transition polish for first-person continuity)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */
