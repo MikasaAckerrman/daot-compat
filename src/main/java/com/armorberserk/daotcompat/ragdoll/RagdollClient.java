@@ -188,11 +188,23 @@ public final class RagdollClient {
      * body toward that point — this is what makes the ODM gear drag your ragdoll body.
      */
     public static void sendRopeForce(Vec3 anchorWorldPos) {
+        sendRope(RagdollTriggerPayload.Action.ROPE_FORCE, anchorWorldPos);
+    }
+
+    /**
+     * Winch request, sent while the player HOLDS Shift (AOT's reel-in) with a rope attached:
+     * the server shortens the rope and hoists the ragdoll body toward the anchor.
+     */
+    public static void sendRopeReel(Vec3 anchorWorldPos) {
+        sendRope(RagdollTriggerPayload.Action.ROPE_REEL, anchorWorldPos);
+    }
+
+    private static void sendRope(RagdollTriggerPayload.Action action, Vec3 anchorWorldPos) {
         if (!enabled() || !isRagdolledLive()) return;
         LocalPlayer player = DAOTCompat.minecraft().player;
         if (player == null) return;
         PacketDistributor.sendToServer(new RagdollTriggerPayload(
-                RagdollTriggerPayload.Action.ROPE_FORCE, anchorWorldPos.x, anchorWorldPos.y, anchorWorldPos.z));
+                action, anchorWorldPos.x, anchorWorldPos.y, anchorWorldPos.z));
     }
 
     private static void markRagdollTriggered() {

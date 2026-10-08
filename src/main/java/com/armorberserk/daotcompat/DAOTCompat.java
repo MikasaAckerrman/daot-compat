@@ -14,6 +14,7 @@ import com.armorberserk.daotcompat.input.RagdollKeybinds;
 import com.armorberserk.daotcompat.network.DaotNetworking;
 import com.armorberserk.daotcompat.ragdoll.RagdollCameraSync;
 import com.armorberserk.daotcompat.ragdoll.RagdollClient;
+import com.armorberserk.daotcompat.ragdoll.RagdollLink;
 import com.armorberserk.daotcompat.ragdoll.RagdollOdmBridge;
 import com.armorberserk.daotcompat.ragdoll.RagdollWorldTracker;
 import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
@@ -64,10 +65,12 @@ public final class DAOTCompat {
         NeoForge.EVENT_BUS.addListener((EntityTickEvent.Pre event) ->
                 ThunderSpearFollower.onTick(event.getEntity()));
 
-        // Диагностика: почему рэгдолл закончился (EXPIRED / RELEASED / PLAYER_DEATH)
-        NeoForge.EVENT_BUS.addListener((dev.leo.sableplayerragdoll.api.RagdollEndEvent event) ->
-                LOGGER.info("[ragdoll] ENDED for {} reason {}", event.player().getGameProfile().getName(),
-                        event.reason()));
+        // Диагностика: почему рэгдолл закончился (EXPIRED / RELEASED / PLAYER_DEATH) + сброс троса
+        NeoForge.EVENT_BUS.addListener((dev.leo.sableplayerragdoll.api.RagdollEndEvent event) -> {
+            LOGGER.info("[ragdoll] ENDED for {} reason {}", event.player().getGameProfile().getName(),
+                    event.reason());
+            RagdollLink.forgetRope(event.player());
+        });
 
         // Client: a LOWEST-priority post-client-tick pass catches hooks that AOT fires
         // during its own ClientTickEvent (which runs AFTER LocalPlayer.tick). Correcting
@@ -119,10 +122,28 @@ public final class DAOTCompat {
                 // computed inside the ragdoll block, consumed by telemetry below.
                 Vec3 ragdollWorld = null;
                 if (ragdolled) {
-                    // Edge-based: consumeClick() fires only on a fresh sneak press, never on hold.
-                    while (Minecraft.getInstance().options.keyShift.consumeClick()) {
-                        RagdollClient.exit();
-                        break;
+                    // The active hook position (any side) — the rope's anchor. Computed FIRST:
+                    // the Shift semantics below depend on whether a rope is attached.
+                    Vec3 ropeAnchor = null;
+                    if (left != null && AOTReflect.isActive(left)) {
+                        ropeAnchor = AOTReflect.getPosition(left);
+                    }
+                    if (ropeAnchor == null && right != null && AOTReflect.isActive(right)) {
+                        ropeAnchor = AOTReflect.getPosition(right);
+                    }
+                    boolean shiftDown = Minecraft.getInstance().options.keyShift.isDown();
+                    if (ropeAnchor != null) {
+                        // Roped: Shift is AOT's reel-in (hold = winch the body toward the
+                        // anchor). Draining clicks so a tap can NOT exit while roped — that is
+                        // the point of holding a lifeline. X still exits any time.
+                        while (Minecraft.getInstance().options.keyShift.consumeClick()) { }
+                        if (shiftDown) RagdollClient.sendRopeReel(ropeAnchor);
+                    } else {
+                        // Not roped: a fresh sneak press exits mid-air, never a hold.
+                        while (Minecraft.getInstance().options.keyShift.consumeClick()) {
+                            RagdollClient.exit();
+                            break;
+                        }
                     }
                     // ПКМ в рэгдолле = выстрел крюками: сиденье глотает ванильный use,
                     // поэтому стреляем программно — крюк летит по прицелу и цепляется.
@@ -152,27 +173,22 @@ public final class DAOTCompat {
                                             "player snapped onto ragdoll body (delta was %.1f blocks)", glueDelta));
                         }
                     }
-                    // Rope-force bridge: works for ANY active hook (terrain, ship, whatever).
-                    // Sends the hook position every tick — server pulls the ragdoll body toward it.
-                    Vec3 ropeAnchor = null;
-                    if (DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
-                        if (left != null && AOTReflect.isActive(left)) {
-                            ropeAnchor = AOTReflect.getPosition(left);
-                        }
-                        if (ropeAnchor == null && right != null && AOTReflect.isActive(right)) {
-                            ropeAnchor = AOTReflect.getPosition(right);
-                        }
-                        if (ropeAnchor != null) RagdollClient.sendRopeForce(ropeAnchor);
+                    // Rope geometry report, every tick: the server runs the constraint
+                    // (taut/slack) off this; the winch tick arrives separately while Shift
+                    // is held (see sendRopeReel above).
+                    if (DaotConfig.RAGDOLL_FORCE_ENABLED.get() && ropeAnchor != null) {
+                        RagdollClient.sendRopeForce(ropeAnchor);
                     }
-                    // v1.4.0: exit when the BODY ARRIVES at the anchor, not when the hook latches.
-                    // The old instant-exit-on-anchor killed the ragdoll within the same tick, so
-                    // rope-force never pulled anything and the body tumbled on its own trajectory.
-                    // One EXIT request per ragdoll session — the server needs a tick to apply it.
-                    if (!arriveExitRequested && ropeAnchor != null && player.position().distanceToSqr(ropeAnchor)
-                            < sqr(DaotConfig.RAGDOLL_ARRIVE_RADIUS.get())) {
+                    // v1.5.0: arrival counts only as an intentional winch — the player is
+                    // REELING and the body has been hoisted to within arriveRadius of the
+                    // anchor. A slack swing that merely passes the anchor does not end the
+                    // ragdoll.
+                    if (!arriveExitRequested && ropeAnchor != null && shiftDown
+                            && player.position().distanceToSqr(ropeAnchor)
+                                    < sqr(DaotConfig.RAGDOLL_ARRIVE_RADIUS.get())) {
                         arriveExitRequested = true;
                         RagdollClient.exit();
-                        LOGGER.info("[ragdoll] body arrived at the anchor -> exiting ragdoll");
+                        LOGGER.info("[ragdoll] winched to the anchor -> exiting ragdoll");
                     }
                 } else {
                     // Not ragdolled: drain vanilla sneak clicks so nothing queues up.
@@ -188,7 +204,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.4.1: live telemetry + ragdoll body glue (config) + rope-force body lookup)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.5.0: rope constraint + Shift winch replaces tractor-beam pull)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */

@@ -60,16 +60,20 @@ public final class DaotConfig {
 
 
     public static final ModConfigSpec.DoubleValue RAGDOLL_PULL_SPEED = BUILDER
-            .comment("Ragdoll body pull speed toward the ODM anchor while ragdolled (m/s)")
+            .comment("DEPRECATED (v1.5.0 replaced the tractor-beam pull with a rope constraint): kept only so old configs parse")
             .defineInRange("ragdollPullSpeed", 16.0D, 1.0D, 64.0D);
+
+    public static final ModConfigSpec.DoubleValue RAGDOLL_REEL_SPEED = BUILDER
+            .comment("Winch speed (m/s) while holding Shift (AOT reel-in) ragdolled with a taut rope: shortens the rope and hoists the body toward the anchor")
+            .defineInRange("ragdollReelSpeed", 8.0D, 0.5D, 32.0D);
 
     public static final ModConfigSpec.DoubleValue RAGDOLL_ARRIVE_RADIUS = BUILDER
             .comment("Distance (blocks) between the ragdoll body and the ODM anchor at which the ragdoll auto-exits (the player is back in control)")
             .defineInRange("ragdollArriveRadius", 3.0D, 0.5D, 16.0D);
 
     public static final ModConfigSpec.BooleanValue RAGDOLL_BODY_GLUE = BUILDER
-            .comment("EXPERIMENTAL: snap the (invisible) player entity onto the ragdoll body's world position every tick while ragdolled — ropes and the F5 camera then hang off the ragdoll instead of a floating invisible body. Toggle live: the client config hot-reloads.")
-            .define("ragdollBodyGlue", false);
+            .comment("Snap the (invisible) player entity onto the ragdoll body's world position every tick while ragdolled — ropes and the F5 camera then hang off the ragdoll instead of a floating invisible body. Verified working (09.10 user test). Toggle live: the client config hot-reloads.")
+            .define("ragdollBodyGlue", true);
 
     public static final ModConfigSpec.BooleanValue TELEMETRY_ENABLED = BUILDER
             .comment("Live telemetry: in-game log overlay (F6) + localhost HTTP endpoint + logs/daotcompat-live.json")

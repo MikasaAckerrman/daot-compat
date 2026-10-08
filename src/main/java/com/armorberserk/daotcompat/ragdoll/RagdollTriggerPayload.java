@@ -21,7 +21,7 @@ import net.neoforged.neoforge.network.handling.IPayloadContext;
 public record RagdollTriggerPayload(Action action, double vx, double vy, double vz)
         implements CustomPacketPayload {
 
-    public enum Action { TRIGGER, STUN, EXIT, ROPE_FORCE }
+    public enum Action { TRIGGER, STUN, EXIT, ROPE_FORCE, ROPE_REEL }
 
     public static final RagdollTriggerPayload EXIT = new RagdollTriggerPayload(Action.EXIT, 0, 0, 0);
 
