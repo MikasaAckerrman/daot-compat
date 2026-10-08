@@ -197,10 +197,18 @@ public final class DAOTCompat {
                     if (DaotConfig.RAGDOLL_BODY_GLUE.get() && ragdollWorld != null) {
                         double glueDelta = player.position().distanceTo(ragdollWorld);
                         if (glueDelta > 0.25D) {
-                            player.setPos(ragdollWorld.x, ragdollWorld.y, ragdollWorld.z);
+                            // Smooth follow, not a snap: the server's passenger sync lags a
+                            // fast-tumbling body by several blocks (live data: deltas 2.8–8.3
+                            // while sliding at 35 m/s) — snapping every tick read as the
+                            // "jerky" feel. Halve the gap each tick instead.
+                            Vec3 from = player.position();
+                            player.setPos(
+                                    from.x + (ragdollWorld.x - from.x) * 0.5D,
+                                    from.y + (ragdollWorld.y - from.y) * 0.5D,
+                                    from.z + (ragdollWorld.z - from.z) * 0.5D);
                             com.armorberserk.daotcompat.util.LogThrottle.info("ragdoll-glue", 2,
                                     String.format(java.util.Locale.ROOT,
-                                            "player snapped onto ragdoll body (delta was %.1f blocks)", glueDelta));
+                                            "player following ragdoll body (gap %.1f blocks)", glueDelta));
                         }
                     }
                 } else {
@@ -226,7 +234,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.8.0: agent control bridge — press keys / aim / commands via localhost)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.8.1: control-bridge fixes, smooth body glue, correct shot paths)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */

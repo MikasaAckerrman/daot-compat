@@ -140,11 +140,8 @@ public final class TelemetryServer {
         String query = rawQuery(ex);
         String key = param(query, "key");
         if (key == null || key.isBlank()) return "{\"error\":\"missing ?key= (see /control/keys)\"}";
-        Boolean down = switch (param(query, "down")) {
-            case "true" -> Boolean.TRUE;
-            case "false" -> Boolean.FALSE;
-            default -> null;
-        };
+        String d = param(query, "down");
+        Boolean down = "true".equals(d) ? Boolean.TRUE : ("false".equals(d) ? Boolean.FALSE : null);
         int ticks = intParam(query, "ticks", down == Boolean.FALSE ? 0 : 1);
         return ControlBridge.press(key, ticks, down);
     }
@@ -251,7 +248,9 @@ public final class TelemetryServer {
     private static byte[] handleShot(HttpExchange ex) throws IOException {
         String file = ScreenCapture.captureAsync("http");
         if (file == null) return null;
-        Path png = FMLPaths.GAMEDIR.get().resolve("screenshots").resolve(file + ".png");
+        // Vanilla Screenshot.grab(File gameDir, name, ...) writes to gameDir/screenshots/<name>
+        // with NO extension appended — the name is used as-is.
+        Path png = FMLPaths.GAMEDIR.get().resolve("screenshots").resolve(file);
         try {
             for (int i = 0; i < 20 && !Files.exists(png); i++) {
                 Thread.sleep(50);
@@ -264,14 +263,14 @@ public final class TelemetryServer {
         return Files.readAllBytes(png);
     }
 
-    /** Serves the newest daotcompat_*.png (the last event capture) without capturing. */
+    /** Serves the newest daotcompat_* frame (the last event capture) without capturing. */
     private static byte[] handleLastShot(HttpExchange ex) throws IOException {
         Path dir = FMLPaths.GAMEDIR.get().resolve("screenshots");
         Path newest = null;
         try (var stream = Files.list(dir)) {
             var it = stream.filter(p -> {
                 String n = p.getFileName().toString();
-                return n.startsWith("daotcompat_") && n.endsWith(".png");
+                return n.startsWith("daotcompat_");
             }).iterator();
             while (it.hasNext()) {
                 Path p = it.next();
@@ -288,7 +287,7 @@ public final class TelemetryServer {
     }
 
     private static String jarVersion() {
-        return "1.2.6";
+        return "1.2.7";
     }
 
     private static void respond(HttpExchange ex, int code, String body) {

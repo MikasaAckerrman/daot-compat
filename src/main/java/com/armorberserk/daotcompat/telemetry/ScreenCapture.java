@@ -38,7 +38,9 @@ public final class ScreenCapture {
         if (now - lastCaptureMs < MIN_INTERVAL_MS) return;
         lastCaptureMs = now;
         try {
-            File dir = FMLPaths.GAMEDIR.get().resolve("screenshots").toFile();
+            // Vanilla grab(File gameDir, ...) writes to gameDir/screenshots/<name> — the name
+            // is used as-is, no extension appended.
+            File dir = FMLPaths.GAMEDIR.get().toFile();
             Screenshot.grab(dir, name(tag, now), mc.getMainRenderTarget(), c -> { });
         } catch (Throwable t) {
             if (!grabFailedLogged) {
@@ -55,7 +57,7 @@ public final class ScreenCapture {
         String file = name(tag, System.currentTimeMillis());
         mc.execute(() -> {
             try {
-                File dir = FMLPaths.GAMEDIR.get().resolve("screenshots").toFile();
+                File dir = FMLPaths.GAMEDIR.get().toFile();
                 Screenshot.grab(dir, file, mc.getMainRenderTarget(), c -> { });
             } catch (Throwable t) {
                 DAOTCompat.LOGGER.warn("[telemetry] screenshot grab failed: {}", t.toString());
