@@ -54,6 +54,10 @@ public final class DaotConfig {
             .comment("While ragdolled, the session runs UNSEATED (autoSeat(false)) and the player's live ODM velocity is mirrored onto the visible ragdoll body every tick (BODY_SYNC) — full native AOT physics through the ragdoll (requires Sable: Ragdolls)")
             .define("ragdollForceEnabled", true);
 
+    public static final ModConfigSpec.BooleanValue RAGDOLL_SMOOTH_RECOVER = BUILDER
+            .comment("Smooth ragdoll -> normal transition: once you are properly flying on the ODM again (airborne, a hook latched, speed held ~0.75s), the ragdoll body converges onto you and is swapped for the player model at the same place and velocity — the body 'rises into the pilot' instead of popping away")
+            .define("ragdollSmoothRecover", true);
+
     public static final ModConfigSpec.BooleanValue TELEMETRY_ENABLED = BUILDER
             .comment("Live telemetry: in-game log overlay (F6) + localhost HTTP endpoint + logs/daotcompat-live.json")
             .define("telemetryEnabled", true);

@@ -54,6 +54,8 @@ public final class DAOTCompat {
 
     public static final String MOD_ID = "daotcompat";
     private static int restTicks;
+    private static int flightStableTicks;
+    private static int recoverWaitTicks;
     private static boolean wasRagdolled;
     private static boolean prevLeftLatched;
     private static boolean prevRightLatched;
@@ -166,6 +168,9 @@ public final class DAOTCompat {
                     if (!wasRagdolled) {
                         ScreenCapture.capture("ragdoll");
                     }
+                    // The ragdoll body's projected world position (nearest sub-level to the
+                    // player) — needed early: the smooth-recover gate reads the body gap.
+                    ragdollWorld = RagdollWorldTracker.bodyWorldPos(player.level(), player.position());
                     // v2.0.0 — the ragdoll runs UNSEATED (autoSeat(false) server-side): the
                     // player entity is NOT a passenger, so vanilla never zeroes their motion and
                     // Danny's AOT keeps owning them through the whole ragdoll — the latched
@@ -178,7 +183,37 @@ public final class DAOTCompat {
                         if (DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
                             RagdollClient.sendBodySync(vel);
                         }
-                        // Auto-recover: on the ground and at rest for ~2 s — the session ends,
+                        // v2.1.0 SMOOTH RECOVER: once the player is properly FLYING on the ODM
+                        // again (airborne, a hook latched, real speed held for ~0.75 s), the
+                        // ragdoll has served its purpose. Wait for the body to converge onto
+                        // the player (the P-controller gap), then swap — same place, same
+                        // velocity: the body "rises into the pilot" instead of popping. A hard
+                        // cut after 2 s so a snagged body can never hold the session hostage.
+                        boolean anyLatched = lLatched || rLatched;
+                        if (DaotConfig.RAGDOLL_SMOOTH_RECOVER.get() && anyLatched && !player.onGround()
+                                && vel.lengthSqr() > 64.0D) {
+                            flightStableTicks++;
+                        } else {
+                            flightStableTicks = 0;
+                            recoverWaitTicks = 0;
+                        }
+                        if (flightStableTicks >= 15) {
+                            recoverWaitTicks++;
+                            boolean bodyConverged = ragdollWorld != null
+                                    && player.position().distanceTo(ragdollWorld) < 1.5D;
+                            if (bodyConverged || recoverWaitTicks >= 40) {
+                                flightStableTicks = 0;
+                                recoverWaitTicks = 0;
+                                RagdollClient.exit();
+                                ScreenCapture.capture("recover");
+                                LOGGER.info("[ragdoll] flight stabilized -> smooth recover ({} m/s, body gap {} blocks)",
+                                        String.format(java.util.Locale.ROOT, "%.1f", vel.length()),
+                                        ragdollWorld != null ? String.format(java.util.Locale.ROOT, "%.1f",
+                                                player.position().distanceTo(ragdollWorld)) : "?");
+                            }
+                        }
+                        // Auto-recover: on the ground and at rest for ~2 s — the session ends
+                        // (also smoothly: exit() detaches, the body lies where it dropped),
                         // the player (the physics object all along) just continues playing.
                         if (player.onGround() && Math.hypot(vel.x, vel.z) < 2.0D) {
                             if (++restTicks >= 40) {
@@ -194,12 +229,15 @@ public final class DAOTCompat {
                         // restTicks reset: the rest window must not count pre-stun ticks
                         // towards the post-stun auto-exit.
                         restTicks = 0;
+                        flightStableTicks = 0;
+                        recoverWaitTicks = 0;
                         RagdollClient.stopOdmSounds();
                     }
                     RagdollCameraSync.sync();
-                    ragdollWorld = RagdollWorldTracker.bodyWorldPos(player.level(), player.position());
                 } else {
                     restTicks = 0;
+                    flightStableTicks = 0;
+                    recoverWaitTicks = 0;
                     // Not ragdolled: drain vanilla sneak clicks so nothing queues up.
                     Minecraft.getInstance().options.keyShift.consumeClick();
                 }
@@ -221,7 +259,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.0.2: full review pass — 6 defects fixed across spears, mixin scope, telemetry start)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.1.0: smooth ragdoll->pilot transition — body converges, detaches, rises into the flight)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */

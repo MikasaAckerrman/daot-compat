@@ -120,7 +120,19 @@ public final class RagdollLink {
 
     private static void exit(ServerPlayer player) {
         var session = RagdollAPI.activeSession(player);
-        if (session != null) session.release();
+        if (session == null) return;
+        // v2.1.0 smooth transition: DETACH instead of instant release. The body has just been
+        // BODY_SYNCed onto the player's position and velocity, so the detached ragdoll keeps
+        // flying alongside the (now visible) player for ~30 ticks and then despawns — the
+        // visual reads as "the ragdoll rises into the pilot", not as a pop. Falls back to a
+        // hard release if the detach API is unavailable.
+        try {
+            RagdollAPI.detachActive(player, dev.leo.sableplayerragdoll.api.PlayerlessDespawnRule.afterTicks(30));
+            DAOTCompat.LOGGER.info("[ragdoll] detached for a smooth recover (body flies on for 30 ticks)");
+        } catch (Throwable t) {
+            session.release();
+            DAOTCompat.LOGGER.debug("[ragdoll] detach unavailable, hard release", t);
+        }
     }
 
     /**
