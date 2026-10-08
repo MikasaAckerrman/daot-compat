@@ -127,10 +127,10 @@ public final class ThunderSpearClientFollower {
             LogThrottle.info("spear-client-carry", 2, "client spear mirrored to " + next);
             entity.setPos(next.x, next.y, next.z);
             SableBridge.setOldPosNoMovement(entity);
-            SpearVisualReflect.carryVisual(entity, oldWorld == null ? pos : oldWorld, next);
+            SpearVisualReflect.carryVisual(oldWorld == null ? pos : oldWorld, next);
             // Plot-world fix: if the tracker spawned the visual at ±20M (plot coords), pull it
             // back to the entity's real client position every tick.
-            int fixedAbnormal = SpearVisualReflect.fixAbnormalVisuals(entity, entity.position());
+            int fixedAbnormal = SpearVisualReflect.fixAbnormalVisuals(entity.position());
             if (fixedAbnormal > 0) DAOTCompat.LOGGER.info("[spear-visual] fixed {} abnormal visual spear(s)", fixedAbnormal);
             ANCHORS.put(entity, new Tracked(anchor, next, tickCounter));
         }

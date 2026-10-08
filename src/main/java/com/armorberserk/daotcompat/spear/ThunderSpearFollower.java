@@ -61,10 +61,17 @@ public final class ThunderSpearFollower {
     // Don't move the spear for sub-millimetre changes (a stationary ship must be a no-op).
     private static final double IDLE_SQR = 1.0E-4D;
 
+    // A plot-frame position is ~±20.48M; ordinary world coordinates are far below this. The
+    // cheap pre-check keeps terrain-lodged spears (the common case!) from running the full
+    // players x sub-levels scan every server tick.
+    private static final double PLOT_COORD = 1.0E7D;
+
     // Fix 2 (code review round 2): TTL invalidation, same rationale as RemoteHookFollower -
-    // if AOT ever reuses spear-entity references across pooling we still auto-heal, and a
-    // monotonic tick counter (not wall-clock) avoids any dependency on real time.
-    private static final long STALE_TICKS = 100L; // ~5s at 20 tps
+    // if AOT ever reuses spear-entity references across pooling we still auto-heal. Note the
+    // counter is incremented per SPEAR tick (not per server tick), so with N spears in the
+    // world the effective TTL is ~STALE_TICKS/N server ticks - still fine, since a live spear
+    // refreshes its own anchor every tick and only removed/unloaded ones expire.
+    private static final long STALE_TICKS = 100L;
     private static long tickCounter;
 
     private record TrackedAnchor(DynamicHookData data, long lastSeenTick) {}
@@ -116,8 +123,14 @@ public final class ThunderSpearFollower {
             if (sl == null) {
                 // Plot-world recovery: в plot-мирах AOT переносит воткнувшееся копьё в систему
                 // координат корабля (±20 млн блоков), findContaining там ничего не находит.
+                // Pre-check: ordinary terrain coordinates never reach PLOT_COORD, so the
+                // expensive scan below only runs for genuinely plot-suspicious positions.
+                if (Math.abs(pos.x) < PLOT_COORD && Math.abs(pos.y) < PLOT_COORD
+                        && Math.abs(pos.z) < PLOT_COORD) {
+                    return; // ordinary terrain or a titan - AOT handles those
+                }
                 SubLevel plotSl = recoverPlotFrame(level, pos);
-                if (plotSl == null) return; // stuck in ordinary terrain or a titan - AOT handles those
+                if (plotSl == null) return;
                 UUID plotId = plotSl.getUniqueId();
                 if (plotId == null) return;
                 Vec3 world;
@@ -199,14 +212,10 @@ public final class ThunderSpearFollower {
         // smooth (or, if the spear isn't a Sable-tracked entity, pinned to the current pos, which
         // still removes the wild swing). Routed through SableBridge so it can never throw.
         //
-        // TODO(stage-later): a more complete integration would register the spear into Sable's own
-        // sub-level "tracking" system (the @Unique sable$trackingSubLevel field set inside
-        // dev.ryanhcode.sable.sublevel.entity_collision.SubLevelEntityCollision#collide and exposed
-        // via the mixin interface EntityMovementExtension#sable$setTrackingSubLevel(SubLevel)). That
-        // would let Sable's own per-tick pose/render systems carry the spear natively instead of our
-        // manual reposition, and setOldPosNoMovement would then take its smooth tracked branch every
-        // tick. It needs a mixin-interface cast plus explicit register/unregister on lodge/drop, so
-        // it is deferred; the unconditional call below already fixes the reported invisibility.
+        // Note: the server ALSO registers the spear into Sable's native tracking on the first
+        // anchored tick (see setTrackingSubLevel above); when Sable carries the entity natively
+        // and places it exactly, the IDLE_SQR guard below makes this whole block a no-op — the
+        // manual path only covers ticks where native carry and our projection disagree.
         SableBridge.setOldPosNoMovement(entity);
 
         LAST_WORLD_POS.put(entity, next); // remember for detonation drift log

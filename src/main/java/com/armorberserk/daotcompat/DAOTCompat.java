@@ -267,7 +267,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.1.1: eyelid-blink transition polish for first-person continuity)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.1.2: spear subsystem night-audit — plot pre-check, dead params and stale TODOs removed)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */

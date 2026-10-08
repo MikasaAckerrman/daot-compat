@@ -5,7 +5,6 @@
 package com.armorberserk.daotcompat.spear;
 
 import com.armorberserk.daotcompat.DAOTCompat;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
 import java.lang.reflect.Field;
@@ -80,7 +79,7 @@ public final class SpearVisualReflect {
      *
      * @return true if at least one visual entry was carried.
      */
-    public static boolean carryVisual(Entity spearEntity, Vec3 oldPos, Vec3 newPos) {
+    public static boolean carryVisual(Vec3 oldPos, Vec3 newPos) {
         if (!ensureProbe()) return false;
         try {
             List<?> spears = (List<?>) activeSpearsField.get(null);
@@ -110,7 +109,7 @@ public final class SpearVisualReflect {
      * lodged visual sitting at an absurd distance is rewritten to the real spear entity's
      * position every tick — the entity itself is world-synced correctly.
      */
-    public static int fixAbnormalVisuals(Entity spearEntity, Vec3 correctPos) {
+    public static int fixAbnormalVisuals(Vec3 correctPos) {
         if (!ensureProbe()) return 0;
         try {
             List<?> spears = (List<?>) activeSpearsField.get(null);
