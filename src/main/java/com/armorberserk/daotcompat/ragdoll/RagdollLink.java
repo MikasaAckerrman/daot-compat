@@ -5,13 +5,13 @@
 package com.armorberserk.daotcompat.ragdoll;
 
 import com.armorberserk.daotcompat.DAOTCompat;
-import com.armorberserk.daotcompat.sable.SubLevelResolver;
-import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.leo.sableplayerragdoll.api.DespawnCondition;
 import dev.leo.sableplayerragdoll.api.RagdollAPI;
 import dev.leo.sableplayerragdoll.api.RagdollLaunchOptions;
+import dev.leo.sableplayerragdoll.api.RagdollSession;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.List;
@@ -132,15 +132,14 @@ public final class RagdollLink {
                     "skipped: player not ragdolled (session already ended?)");
             return;
         }
-        SubLevel sl = SubLevelResolver.findContaining(player.serverLevel(), player.position());
-        if (!(sl instanceof dev.ryanhcode.sable.sublevel.ServerSubLevel serverSubLevel)) {
+        dev.ryanhcode.sable.sublevel.ServerSubLevel body = ragdollBody(player);
+        if (body == null) {
             com.armorberserk.daotcompat.util.LogThrottle.info("rope-force-skip", 10,
-                    "skipped: no ragdoll sub-level found at player pos " + fmt(player.position()));
+                    "skipped: ragdoll body unavailable (no active session sub-level)");
             return;
         }
-        // Любой суб-левел, в котором сидит игрок — работает для кораблей и рэгдоллов
         try {
-            var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(serverSubLevel);
+            var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(body);
             org.joml.Vector3d current = new org.joml.Vector3d();
             handle.getLinearVelocity(current);
             Vec3 toAnchor = anchorPos.subtract(player.position());
@@ -163,9 +162,42 @@ public final class RagdollLink {
         }
     }
 
-    private static String fmt(Vec3 v) {
-        return String.format(java.util.Locale.ROOT, "(%.1f, %.1f, %.1f)", v.x, v.y, v.z);
+    /**
+     * The active ragdoll session's own physics sub-level — the exact body the seat rides.
+     *
+     * <p>Live-telemetry finding (08.10): the old lookup probed a 0.05-block box at the player's
+     * position, but a ragdoll is six small limb sub-levels and the seat point falls between
+     * them — the probe missed every part, the pull never engaged, and the body tumbled on its
+     * own trajectory. The session record exposes {@code subLevel()} directly; the class is
+     * package-private, so the accessor is resolved reflectively once and cached (failures
+     * logged, never swallowed silently).
+     */
+    @Nullable
+    private static dev.ryanhcode.sable.sublevel.ServerSubLevel ragdollBody(ServerPlayer player) {
+        try {
+            RagdollSession session = RagdollAPI.activeSession(player);
+            if (session == null) return null;
+            if (SUB_LEVEL_ACCESSOR == null && !subLevelAccessorFailed) {
+                try {
+                    SUB_LEVEL_ACCESSOR = session.getClass().getMethod("subLevel");
+                    SUB_LEVEL_ACCESSOR.setAccessible(true);
+                    DAOTCompat.LOGGER.info("[ragdoll] session subLevel() accessor resolved");
+                } catch (Throwable t) {
+                    subLevelAccessorFailed = true;
+                    DAOTCompat.LOGGER.warn("[ragdoll] session.subLevel() not accessible: {}", t.toString());
+                }
+            }
+            if (SUB_LEVEL_ACCESSOR == null) return null;
+            Object sl = SUB_LEVEL_ACCESSOR.invoke(session);
+            return sl instanceof dev.ryanhcode.sable.sublevel.ServerSubLevel ssl ? ssl : null;
+        } catch (Throwable t) {
+            DAOTCompat.LOGGER.debug("[ragdoll] ragdoll body lookup failed", t);
+            return null;
+        }
     }
+
+    private static volatile java.lang.reflect.Method SUB_LEVEL_ACCESSOR;
+    private static volatile boolean subLevelAccessorFailed;
 
     private static boolean onCooldown(ServerPlayer player) {
         long now = player.level().getGameTime();
