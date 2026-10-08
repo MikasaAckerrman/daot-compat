@@ -82,7 +82,7 @@ public final class RagdollLink {
                 case TRIGGER -> trigger(player, new Vec3(payload.vx(), payload.vy(), payload.vz()));
                 case STUN -> stun(player, new Vec3(payload.vx(), payload.vy(), payload.vz()));
                 case EXIT -> exit(player);
-                case RECOVER -> recover(player);
+                case BODY_SYNC -> bodySync(player, new Vec3(payload.vx(), payload.vy(), payload.vz()));
             }
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("[ragdoll] link call failed", t);
@@ -92,10 +92,13 @@ public final class RagdollLink {
     private static void trigger(ServerPlayer player, Vec3 velocity) {
         if (!player.isAlive() || RagdollAPI.isRagdolled(player)) return;
         if (onCooldown(player)) return;
-        // autoSeat(true) (дефолт): игрок сидит на теле рэгдолла → позиции синхронизированы.
-        // Гейт isPassenger в AOT обходится через EntityIsPassengerMixin (client-side).
-        RagdollAPI.launch(player, clamp(velocity, MAX_LAUNCH_SPEED));
-        DAOTCompat.LOGGER.info("[ragdoll] launched for {} at {} m/s",
+        // v2.0.0 UNSEATED: autoSeat(false) keeps the player OUT of the seat, so vanilla never
+        // zeroes their deltaMovement — Danny's AOT keeps owning them through the whole ragdoll
+        // (the latched ropes swing on, gas and reel work natively). The visible body is dragged
+        // along by BODY_SYNC. This replaces every prior "bridge the physics" attempt.
+        RagdollAPI.launch(player, clamp(velocity, MAX_LAUNCH_SPEED),
+                RagdollLaunchOptions.builder().autoSeat(false).build());
+        DAOTCompat.LOGGER.info("[ragdoll] launched (unseated) for {} at {} m/s",
                 player.getGameProfile().getName(),
                 String.format(java.util.Locale.ROOT, "%.1f", velocity.length()));
     }
@@ -104,12 +107,13 @@ public final class RagdollLink {
         if (!player.isAlive() || RagdollAPI.isRagdolled(player)) return;
         int ticks = com.armorberserk.daotcompat.config.DaotConfig.STUN_TICKS.get();
         RagdollLaunchOptions options = RagdollLaunchOptions.builder()
+                .autoSeat(false)
                 .lockDismount(true)
                 .despawnConditions(List.of(DespawnCondition.afterTicks(ticks)))
                 .build();
         RagdollAPI.launch(player, clamp(velocity, MAX_LAUNCH_SPEED), options);
         STUN_UNTIL.put(player.getUUID(), player.level().getGameTime() + ticks);
-        DAOTCompat.LOGGER.info("[ragdoll] STUN for {} ({} ticks) at {} m/s",
+        DAOTCompat.LOGGER.info("[ragdoll] STUN (unseated) for {} ({} ticks) at {} m/s",
                 player.getGameProfile().getName(), ticks,
                 String.format(java.util.Locale.ROOT, "%.1f", velocity.length()));
     }
@@ -120,66 +124,37 @@ public final class RagdollLink {
     }
 
     /**
-     * RECOVER (v1.6.0): a hook latched while ragdolled — the player caught a lifeline.
-     *
-     * <p>The v1.3–v1.5 rope bridges (tractor beam, then hand-rolled constraint) all tried to
-     * re-implement ODM physics on the ragdoll body and felt dead, because the real thing
-     * already lives in Danny's AOT — it just cannot act on a seated player (vanilla zeroes a
-     * passenger's deltaMovement every tick; live telemetry: player vel = 0 the whole ragdoll).
-     *
-     * <p>So instead of bridging forces, we hand over the STATE: the player receives the physics
-     * body's position and its linear velocity (the crash momentum, not lost), the ragdoll
-     * session ends — and from that tick AOT's own, untouched physics owns the player: the
-     * already-latched rope, the swing, the gas boost, the reel. The ragdoll phase preserved its
-     * momentum too (Sable's simulation); nothing is invented, everything is inherited.
+     * BODY_SYNC (v2.0.0): the player runs UNSEATED — full native AOT physics on the player
+     * entity — while the visible ragdoll body is a Sable sublevel that knows nothing about the
+     * ODM. This mirror converges the body's linear velocity onto the player's every tick (the
+     * client reports the player's true velocity), so the ragdoll rides the player's rope
+     * trajectory instead of tumbling on its own.
      */
-    private static void recover(ServerPlayer player) {
+    private static void bodySync(ServerPlayer player, Vec3 playerVel) {
         if (!player.isAlive() || !RagdollAPI.isRagdolled(player)) return;
-        Vec3 spawn = player.position();
-        Vec3 velocity = Vec3.ZERO;
-
         dev.ryanhcode.sable.sublevel.ServerSubLevel body = ragdollBody(player);
-        if (body != null) {
-            Vec3 bodyWorld = bodyWorld(player, body);
-            if (bodyWorld != null) spawn = bodyWorld;
-            try {
-                var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(body);
-                org.joml.Vector3d v = new org.joml.Vector3d();
-                handle.getLinearVelocity(v);
-                velocity = clamp(new Vec3(v.x, v.y, v.z), MAX_LAUNCH_SPEED);
-            } catch (Throwable t) {
-                DAOTCompat.LOGGER.debug("[ragdoll] body velocity read failed", t);
-            }
-        }
-
-        var session = RagdollAPI.activeSession(player);
-        if (session != null) session.release();
-        player.teleportTo(spawn.x, spawn.y, spawn.z);
-        player.setDeltaMovement(velocity);
-        net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(
-                player, new RagdollRecoverPayload(velocity.x, velocity.y, velocity.z));
-        DAOTCompat.LOGGER.info("[ragdoll] RECOVERED {} at {} with {} m/s — ODM physics takes over",
-                player.getGameProfile().getName(), fmt(spawn),
-                String.format(java.util.Locale.ROOT, "%.1f", velocity.length()));
-    }
-
-    /** The physics body's world position: the sub-level pose applied to the seat's plot position. */
-    @Nullable
-    private static Vec3 bodyWorld(ServerPlayer player,
-                                   dev.ryanhcode.sable.sublevel.ServerSubLevel body) {
+        if (body == null) return;
         try {
-            net.minecraft.world.entity.Entity seat = player.getVehicle();
-            if (seat == null) return null;
-            Vec3 w = body.logicalPose().transformPosition(seat.position());
-            if (!Double.isFinite(w.x) || !Double.isFinite(w.y) || !Double.isFinite(w.z)) return null;
-            return w;
+            var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(body);
+            org.joml.Vector3d current = new org.joml.Vector3d();
+            handle.getLinearVelocity(current);
+            // Snappier than the old rope bridge: this must track a live swing, and both sides
+            // carry the same physics; ±6 m/s per axis per tick is still orbit-proof.
+            double dx = org.joml.Math.clamp(playerVel.x - current.x, -6.0, 6.0);
+            double dy = org.joml.Math.clamp(playerVel.y - current.y, -6.0, 6.0);
+            double dz = org.joml.Math.clamp(playerVel.z - current.z, -6.0, 6.0);
+            handle.addLinearAndAngularVelocity(new org.joml.Vector3d(dx, dy, dz), new org.joml.Vector3d(0, 0, 0));
+            com.armorberserk.daotcompat.util.LogThrottle.info("body-sync", 5,
+                    String.format(java.util.Locale.ROOT,
+                            "player vel (%.1f, %.1f, %.1f) | body vel (%.1f, %.1f, %.1f) | dv (%.1f, %.1f, %.1f)",
+                            playerVel.x, playerVel.y, playerVel.z, current.x, current.y, current.z, dx, dy, dz));
         } catch (Throwable t) {
-            return null;
+            DAOTCompat.LOGGER.debug("[ragdoll] body sync failed", t);
         }
     }
 
     /**
-     * The active ragdoll session's own physics sub-level — the exact body the seat rides.
+     * The active ragdoll session's own physics sub-level — the body BODY_SYNC drives.
      *
      * <p>Live-telemetry finding (08.10): the old lookup probed a 0.05-block box at the player's
      * position, but a ragdoll is six small limb sub-levels and the seat point falls between
@@ -226,9 +201,5 @@ public final class RagdollLink {
     private static Vec3 clamp(Vec3 v, double max) {
         double len = v.length();
         return (len > max && len > 1.0E-9) ? v.scale(max / len) : v;
-    }
-
-    private static String fmt(Vec3 v) {
-        return String.format(java.util.Locale.ROOT, "(%.1f, %.1f, %.1f)", v.x, v.y, v.z);
     }
 }

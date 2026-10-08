@@ -109,8 +109,7 @@ public final class LiveState {
         b.append(",\"ragdoll\":{\"live\":").append(ragdolledLive)
                 .append(",\"stunned\":").append(stunned)
                 .append(",\"soundSuppression\":").append(soundSuppression)
-                .append(",\"recoverEnabled\":").append(DaotConfig.RAGDOLL_FORCE_ENABLED.get())
-                .append(",\"bodyGlue\":").append(DaotConfig.RAGDOLL_BODY_GLUE.get())
+                .append(",\"bodySync\":").append(DaotConfig.RAGDOLL_FORCE_ENABLED.get())
                 .append(",\"worldPos\":").append(vecJson(ragdollWorldPos))
                 .append(",\"distPlayerToBody\":").append(ragdollDist >= 0.0D ? Json.n(ragdollDist) : "null")
                 .append("}");

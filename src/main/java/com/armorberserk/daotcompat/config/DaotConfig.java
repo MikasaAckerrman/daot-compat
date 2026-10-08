@@ -51,12 +51,8 @@ public final class DaotConfig {
             .define("antiTunnel", true);
 
     public static final ModConfigSpec.BooleanValue RAGDOLL_FORCE_ENABLED = BUILDER
-            .comment("While ragdolled, a latched hook RECOVERS the player: hands over the ragdoll body's position and crash momentum, ends the ragdoll — then Danny's AOT physics (swing, gas, reel) owns the player (requires Sable: Ragdolls)")
+            .comment("While ragdolled, the session runs UNSEATED (autoSeat(false)) and the player's live ODM velocity is mirrored onto the visible ragdoll body every tick (BODY_SYNC) — full native AOT physics through the ragdoll (requires Sable: Ragdolls)")
             .define("ragdollForceEnabled", true);
-
-    public static final ModConfigSpec.BooleanValue RAGDOLL_BODY_GLUE = BUILDER
-            .comment("Snap the (invisible) player entity onto the ragdoll body's world position every tick while ragdolled — ropes and the F5 camera then hang off the ragdoll instead of a floating invisible body. Verified working (09.10 user test). Toggle live: the client config hot-reloads.")
-            .define("ragdollBodyGlue", true);
 
     public static final ModConfigSpec.BooleanValue TELEMETRY_ENABLED = BUILDER
             .comment("Live telemetry: in-game log overlay (F6) + localhost HTTP endpoint + logs/daotcompat-live.json")

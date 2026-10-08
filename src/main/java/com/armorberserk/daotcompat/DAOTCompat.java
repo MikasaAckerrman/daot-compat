@@ -14,8 +14,6 @@ import com.armorberserk.daotcompat.input.RagdollKeybinds;
 import com.armorberserk.daotcompat.network.DaotNetworking;
 import com.armorberserk.daotcompat.ragdoll.RagdollCameraSync;
 import com.armorberserk.daotcompat.ragdoll.RagdollClient;
-import com.armorberserk.daotcompat.ragdoll.RagdollLink;
-import com.armorberserk.daotcompat.ragdoll.RagdollOdmBridge;
 import com.armorberserk.daotcompat.ragdoll.RagdollWorldTracker;
 import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
@@ -54,8 +52,7 @@ import org.slf4j.LoggerFactory;
 public final class DAOTCompat {
 
     public static final String MOD_ID = "daotcompat";
-    private static boolean ragdollUseWasDown;
-    private static boolean recoverRequested;
+    private static int restTicks;
     private static boolean wasRagdolled;
     private static boolean prevLeftLatched;
     private static boolean prevRightLatched;
@@ -135,7 +132,7 @@ public final class DAOTCompat {
                 // Titan wire-break (AOT's own "Wire broke!" path, titanWireBreakCooldowns in
                 // ODMTickHandler): a hook that was latched and goes inactive WITHOUT retracting
                 // had its cable cut. At speed that is a hard crash — ragdoll, momentum intact.
-                if (!ragdolled && !RagdollClient.isStunned() && !RagdollClient.isSelfReleaseRecent()) {
+                if (!ragdolled && !RagdollClient.isStunned()) {
                     boolean leftBroke = prevLeftLatched && left != null && !AOTReflect.isActive(left) && !prevLeftRetracting;
                     boolean rightBroke = prevRightLatched && right != null && !AOTReflect.isActive(right) && !prevRightRetracting;
                     if (leftBroke || rightBroke) {
@@ -157,63 +154,38 @@ public final class DAOTCompat {
                     if (!wasRagdolled) {
                         ScreenCapture.capture("ragdoll");
                     }
-                    // A fresh Shift PRESS exits mid-air (hold does NOT — ODM uses Shift for
-                    // reel-in, so a held Shift must not kick the player out of the ragdoll).
-                    while (Minecraft.getInstance().options.keyShift.consumeClick()) {
-                        RagdollClient.exit();
-                        break;
-                    }
-                    // v1.6.0/v1.7.0 RECOVERY: only a hook that latches FOR THE FIRST TIME while
-                    // ragdolled counts (edge, not level — pre-crash hooks must not instantly
-                    // cancel the ragdoll). The server hands the ragdoll body's position + crash
-                    // momentum to the player and ends the ragdoll — from that tick AOT's own
-                    // physics (rope, swing, gas, reel) owns the player completely.
-                    boolean freshLatch = (lLatched && !prevLeftLatched) || (rLatched && !prevRightLatched);
-                    if (!recoverRequested && DaotConfig.RAGDOLL_FORCE_ENABLED.get() && freshLatch) {
-                        recoverRequested = true;
-                        RagdollClient.sendRecover();
-                        ScreenCapture.capture("latch");
-                        LOGGER.info("[ragdoll] hook latched while ragdolled -> RECOVER (crash momentum handoff)");
-                    }
-                    // ПКМ в рэгдолле = выстрел крюками: сиденье глотает ванильный use,
-                    // поэтому стреляем программно — крюк летит по прицелу и цепляется.
-                    // Edge-детект isDown: ванильный handleKeybinds осушает consumeClick до нас.
-                    boolean useDownNow = Minecraft.getInstance().options.keyUse.isDown();
-                    if (useDownNow && !ragdollUseWasDown) {
-                        RagdollOdmBridge.fireHooksAtCrosshair(player);
-                    }
-                    ragdollUseWasDown = useDownNow;
-                    RagdollClient.stopOdmSounds();
-                    RagdollCameraSync.sync();
-
-                    // Project the ragdoll body into world space (seat plot pos -> sub-level pose).
-                    // While ragdolled everything visual hangs off the PLAYER entity — AOT ropes,
-                    // the F5 camera — and the ragdoll mod keeps that entity as a separate
-                    // invisible body. The optional glue snaps it onto the ragdoll every tick.
-                    if (player.getVehicle() != null) {
-                        ragdollWorld = RagdollWorldTracker.seatWorldPos(
-                                player.level(), player.getVehicle().position(), player.position());
-                    }
-                    if (DaotConfig.RAGDOLL_BODY_GLUE.get() && ragdollWorld != null) {
-                        double glueDelta = player.position().distanceTo(ragdollWorld);
-                        if (glueDelta > 0.25D) {
-                            // Smooth follow, not a snap: the server's passenger sync lags a
-                            // fast-tumbling body by several blocks (live data: deltas 2.8–8.3
-                            // while sliding at 35 m/s) — snapping every tick read as the
-                            // "jerky" feel. Halve the gap each tick instead.
-                            Vec3 from = player.position();
-                            player.setPos(
-                                    from.x + (ragdollWorld.x - from.x) * 0.5D,
-                                    from.y + (ragdollWorld.y - from.y) * 0.5D,
-                                    from.z + (ragdollWorld.z - from.z) * 0.5D);
-                            com.armorberserk.daotcompat.util.LogThrottle.info("ragdoll-glue", 2,
-                                    String.format(java.util.Locale.ROOT,
-                                            "player following ragdoll body (gap %.1f blocks)", glueDelta));
+                    // v2.0.0 — the ragdoll runs UNSEATED (autoSeat(false) server-side): the
+                    // player entity is NOT a passenger, so vanilla never zeroes their motion and
+                    // Danny's AOT keeps owning them through the whole ragdoll — the latched
+                    // ropes swing on, the gas boost and the reel work exactly as without a
+                    // ragdoll. Our job here is only to mirror that motion onto the visible
+                    // ragdoll body (BODY_SYNC) and to end the session when the player recovers.
+                    // Shift stays AOT's native reel; X (the exit keybind) still exits manually.
+                    if (!RagdollClient.isStunned()) {
+                        Vec3 vel = player.getDeltaMovement();
+                        if (DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
+                            RagdollClient.sendBodySync(vel);
                         }
+                        // Auto-recover: on the ground and at rest for ~2 s — the session ends,
+                        // the player (the physics object all along) just continues playing.
+                        if (player.onGround() && Math.hypot(vel.x, vel.z) < 2.0D) {
+                            if (++restTicks >= 40) {
+                                restTicks = 0;
+                                RagdollClient.exit();
+                                LOGGER.info("[ragdoll] body at rest -> auto-exit");
+                            }
+                        } else {
+                            restTicks = 0;
+                        }
+                    } else {
+                        // Stunned: pinned, ODM suppressed — kill the gear's looping drone.
+                        RagdollClient.stopOdmSounds();
                     }
+                    RagdollCameraSync.sync();
+                    ragdollWorld = RagdollWorldTracker.bodyWorldPos(player.level(), player.position());
                 } else {
+                    restTicks = 0;
                     // Not ragdolled: drain vanilla sneak clicks so nothing queues up.
-                    recoverRequested = false;
                     Minecraft.getInstance().options.keyShift.consumeClick();
                 }
                 RagdollClient.tickSoundSuppressionState();
@@ -234,7 +206,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.8.1: control-bridge fixes, smooth body glue, correct shot paths)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.0.0: unseated ragdoll — native AOT physics through the ragdoll, BODY_SYNC visual, wire-break detector)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */

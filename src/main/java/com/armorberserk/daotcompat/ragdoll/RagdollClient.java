@@ -93,7 +93,6 @@ public final class RagdollClient {
     /** Hook anchor was just lost while moving fast — ordinary hard crash (ODM stays usable). */
     public static void triggerCrash(Vec3 playerMotion) {
         markRagdollTriggered();
-        releaseHooksForTrigger();
         stopOdmSounds();
         send(RagdollTriggerPayload.Action.TRIGGER, playerMotion);
     }
@@ -101,7 +100,6 @@ public final class RagdollClient {
     /** Hook anchor lost at very high speed — hard crash with a stun window. */
     public static void triggerStun(Vec3 playerMotion) {
         markRagdollTriggered();
-        releaseHooksForTrigger();
         stopOdmSounds();
         stunUntilMs = System.currentTimeMillis() + DaotConfig.STUN_TICKS.get() * 50L;
         send(RagdollTriggerPayload.Action.STUN, playerMotion);
@@ -111,25 +109,18 @@ public final class RagdollClient {
     /** Arrived at a weak flat anchor at speed — trip. */
     public static void triggerTrip(Vec3 horizontalMotion) {
         markRagdollTriggered();
-        releaseHooksForTrigger();
         stopOdmSounds();
         send(RagdollTriggerPayload.Action.TRIGGER, horizontalMotion);
     }
 
     /**
-     * Hooks released BY US at ragdoll start (clean state). The wire-break detector must not
-     * misread this as "titan cut the cable" — {@link #isSelfReleaseRecent()} suppresses it.
+     * BODY_SYNC (v2.0.0): every tick while ragdolled, the client reports the player's velocity —
+     * with the ragdoll running UNSEATED this is Danny's AOT live output (rope swing, gas, reel),
+     * and the server mirrors it onto the visible ragdoll body.
      */
-    private static volatile long hooksSelfReleasedAt;
-
-    private static void releaseHooksForTrigger() {
-        hooksSelfReleasedAt = System.currentTimeMillis();
-        com.armorberserk.daotcompat.aot.AOTReflect.releaseBoth();
-    }
-
-    /** True shortly after WE released the hooks (vs. a foreign wire break). */
-    public static boolean isSelfReleaseRecent() {
-        return System.currentTimeMillis() - hooksSelfReleasedAt < 500L;
+    public static void sendBodySync(Vec3 playerVelocity) {
+        if (!enabled() || !isRagdolledLive() || isStunned()) return;
+        send(RagdollTriggerPayload.Action.BODY_SYNC, playerVelocity);
     }
 
     /**
@@ -199,19 +190,6 @@ public final class RagdollClient {
     /** Release both ODM ropes (hooks) client-side — they belong to the local player's gear. */
     public static void releaseRopes() {
         com.armorberserk.daotcompat.aot.AOTReflect.releaseBoth();
-    }
-
-    /**
-     * RECOVER (v1.6.0): a hook latched while ragdolled. The server reads the physics body's
-     * position and linear velocity (the crash momentum), ends the ragdoll session and hands
-     * both to the player — from that tick Danny's AOT physics owns the swing, gas and reel.
-     */
-    public static void sendRecover() {
-        if (!enabled() || !isRagdolledLive()) return;
-        LocalPlayer player = DAOTCompat.minecraft().player;
-        if (player == null) return;
-        PacketDistributor.sendToServer(new RagdollTriggerPayload(
-                RagdollTriggerPayload.Action.RECOVER, 0.0D, 0.0D, 0.0D));
     }
 
     private static void markRagdollTriggered() {
