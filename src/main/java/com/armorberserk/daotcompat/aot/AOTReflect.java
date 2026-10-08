@@ -125,6 +125,16 @@ public final class AOTReflect {
         }
     }
 
+    /** True while the hook is reeling itself back in (a manual retract, NOT a wire break). */
+    public static boolean isRetracting(@Nullable Object hook) {
+        if (!isAvailable() || hook == null) return false;
+        try {
+            return retracting.getBoolean(hook);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
     public static boolean isOnEntity(@Nullable Object hook) {
         if (!isAvailable() || hook == null) return false;
         try {

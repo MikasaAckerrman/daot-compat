@@ -49,6 +49,7 @@ public record RagdollRecoverPayload(double vx, double vy, double vz)
         context.enqueueWork(() -> {
             if (context.player() instanceof LocalPlayer player) {
                 player.setDeltaMovement(new Vec3(payload.vx, payload.vy, payload.vz));
+                com.armorberserk.daotcompat.telemetry.ScreenCapture.capture("recovered");
                 DAOTCompat.LOGGER.info("[ragdoll] crash momentum handed to the player: ({}, {}, {}) — ODM physics owns the swing now",
                         String.format(java.util.Locale.ROOT, "%.1f", payload.vx),
                         String.format(java.util.Locale.ROOT, "%.1f", payload.vy),

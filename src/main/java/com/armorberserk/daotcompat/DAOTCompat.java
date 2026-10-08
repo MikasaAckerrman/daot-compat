@@ -22,6 +22,7 @@ import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
 import com.armorberserk.daotcompat.telemetry.InGameLogOverlay;
 import com.armorberserk.daotcompat.telemetry.LiveState;
 import com.armorberserk.daotcompat.telemetry.LogTap;
+import com.armorberserk.daotcompat.telemetry.ScreenCapture;
 import com.armorberserk.daotcompat.telemetry.TelemetryServer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -55,6 +56,11 @@ public final class DAOTCompat {
     public static final String MOD_ID = "daotcompat";
     private static boolean ragdollUseWasDown;
     private static boolean recoverRequested;
+    private static boolean wasRagdolled;
+    private static boolean prevLeftLatched;
+    private static boolean prevRightLatched;
+    private static boolean prevLeftRetracting;
+    private static boolean prevRightRetracting;
     public static final Logger LOGGER = LoggerFactory.getLogger("DAOT Compat");
 
     public DAOTCompat(IEventBus modBus, ModContainer container) {
@@ -119,22 +125,54 @@ public final class DAOTCompat {
                 // Ragdoll body projected into world space (null unless tracked this tick) —
                 // computed inside the ragdoll block, consumed by telemetry below.
                 Vec3 ragdollWorld = null;
+
+                // Hook edges, shared by wire-break detection and the RECOVER trigger.
+                boolean lLatched = AOTReflect.isLatched(left);
+                boolean rLatched = AOTReflect.isLatched(right);
+                boolean lRetracting = AOTReflect.isRetracting(left);
+                boolean rRetracting = AOTReflect.isRetracting(right);
+
+                // Titan wire-break (AOT's own "Wire broke!" path, titanWireBreakCooldowns in
+                // ODMTickHandler): a hook that was latched and goes inactive WITHOUT retracting
+                // had its cable cut. At speed that is a hard crash — ragdoll, momentum intact.
+                if (!ragdolled && !RagdollClient.isStunned() && !RagdollClient.isSelfReleaseRecent()) {
+                    boolean leftBroke = prevLeftLatched && left != null && !AOTReflect.isActive(left) && !prevLeftRetracting;
+                    boolean rightBroke = prevRightLatched && right != null && !AOTReflect.isActive(right) && !prevRightRetracting;
+                    if (leftBroke || rightBroke) {
+                        Vec3 motion = player.getDeltaMovement();
+                        double horizontal = Math.hypot(motion.x, motion.z);
+                        if (horizontal >= DaotConfig.CRASH_MIN_SPEED.get()) {
+                            RagdollClient.triggerCrash(motion);
+                            ScreenCapture.capture("wirebroke");
+                            LOGGER.info("[hook] WIRE BROKE at {} m/s horizontal -> ragdoll (titan cut / snap)",
+                                    String.format(java.util.Locale.ROOT, "%.1f", horizontal));
+                        } else {
+                            LOGGER.info("[hook] wire broke at {} m/s horizontal — below crashMinSpeed, no ragdoll",
+                                    String.format(java.util.Locale.ROOT, "%.1f", horizontal));
+                        }
+                    }
+                }
+
                 if (ragdolled) {
+                    if (!wasRagdolled) {
+                        ScreenCapture.capture("ragdoll");
+                    }
                     // A fresh Shift PRESS exits mid-air (hold does NOT — ODM uses Shift for
                     // reel-in, so a held Shift must not kick the player out of the ragdoll).
                     while (Minecraft.getInstance().options.keyShift.consumeClick()) {
                         RagdollClient.exit();
                         break;
                     }
-                    // v1.6.0 RECOVERY: a latched hook mid-ragdoll = the player caught a
-                    // lifeline. The server hands the ragdoll body's position + crash momentum
-                    // to the player and ends the ragdoll — from that tick AOT's own physics
-                    // (rope, swing, gas, reel) owns the player completely. One request per
-                    // session; the server re-validates (alive, ragdolled, not stunned).
-                    if (!recoverRequested && DaotConfig.RAGDOLL_FORCE_ENABLED.get()
-                            && (AOTReflect.isLatched(left) || AOTReflect.isLatched(right))) {
+                    // v1.6.0/v1.7.0 RECOVERY: only a hook that latches FOR THE FIRST TIME while
+                    // ragdolled counts (edge, not level — pre-crash hooks must not instantly
+                    // cancel the ragdoll). The server hands the ragdoll body's position + crash
+                    // momentum to the player and ends the ragdoll — from that tick AOT's own
+                    // physics (rope, swing, gas, reel) owns the player completely.
+                    boolean freshLatch = (lLatched && !prevLeftLatched) || (rLatched && !prevRightLatched);
+                    if (!recoverRequested && DaotConfig.RAGDOLL_FORCE_ENABLED.get() && freshLatch) {
                         recoverRequested = true;
                         RagdollClient.sendRecover();
+                        ScreenCapture.capture("latch");
                         LOGGER.info("[ragdoll] hook latched while ragdolled -> RECOVER (crash momentum handoff)");
                     }
                     // ПКМ в рэгдолле = выстрел крюками: сиденье глотает ванильный use,
@@ -172,6 +210,13 @@ public final class DAOTCompat {
                 }
                 RagdollClient.tickSoundSuppressionState();
 
+                // Edge memory for the next tick's transitions.
+                wasRagdolled = ragdolled;
+                prevLeftLatched = lLatched;
+                prevRightLatched = rLatched;
+                prevLeftRetracting = lRetracting;
+                prevRightRetracting = rRetracting;
+
                 // Telemetry: F6 overlay edge-detect, per-tick live snapshot, throttled file dump.
                 InGameLogOverlay.tick();
                 LiveState.capture(player, left, right, ragdolled, ragdollWorld);
@@ -179,7 +224,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.6.0: RECOVER — crash-momentum handoff onto AOT's own rope physics)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v1.7.0: RECOVER edge-latch, titan wire-break -> ragdoll, event screenshots + /shot)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */

@@ -66,6 +66,8 @@ public final class TelemetryServer {
             http.createContext("/state", ex -> safeHandle(ex, TelemetryServer::handleState));
             http.createContext("/events", ex -> safeHandle(ex, TelemetryServer::handleEvents));
             http.createContext("/health", ex -> safeHandle(ex, TelemetryServer::handleHealth));
+            http.createContext("/shot", ex -> safeHandleBytes(ex, TelemetryServer::handleShot));
+            http.createContext("/shot/last", ex -> safeHandleBytes(ex, TelemetryServer::handleLastShot));
             http.start();
             server = http;
             DAOTCompat.LOGGER.info("[telemetry] live at http://127.0.0.1:{}/state (logs: /events, file: logs/daotcompat-live.json)", port);
@@ -133,8 +135,82 @@ public final class TelemetryServer {
         return "{\"ok\":true,\"mod\":\"daotcompat\",\"jarVersion\":\"" + Json.esc(jarVersion()) + "\"}";
     }
 
+    // --- Screenshot endpoints: the developer's eyes into the running game ---
+
+    private interface BytesHandler {
+        byte[] handle(HttpExchange ex) throws IOException;
+    }
+
+    private static void safeHandleBytes(HttpExchange ex, BytesHandler handler) {
+        try {
+            byte[] bytes = handler.handle(ex);
+            if (bytes == null) {
+                respond(ex, 500, "{\"error\":\"capture failed\"}");
+                return;
+            }
+            try {
+                ex.getResponseHeaders().set("Content-Type", "image/png");
+                ex.getResponseHeaders().set("X-Shot-Name", shotName(ex));
+                ex.sendResponseHeaders(200, bytes.length);
+                ex.getResponseBody().write(bytes);
+            } catch (IOException ignored) {
+            } finally {
+                try {
+                    ex.close();
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable t) {
+            respond(ex, 500, "{\"error\":\"" + Json.esc(t.toString()) + "\"}");
+        }
+    }
+
+    private static String shotName(HttpExchange ex) {
+        return ex.getAttribute("shotName") instanceof String s ? s : "";
+    }
+
+    /** Captures NOW (scheduled onto the render thread), waits briefly, serves the PNG. */
+    private static byte[] handleShot(HttpExchange ex) throws IOException {
+        String file = ScreenCapture.captureAsync("http");
+        if (file == null) return null;
+        Path png = FMLPaths.GAMEDIR.get().resolve("screenshots").resolve(file + ".png");
+        try {
+            for (int i = 0; i < 20 && !Files.exists(png); i++) {
+                Thread.sleep(50);
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        if (!Files.exists(png)) return null;
+        ex.setAttribute("shotName", png.getFileName().toString());
+        return Files.readAllBytes(png);
+    }
+
+    /** Serves the newest daotcompat_*.png (the last event capture) without capturing. */
+    private static byte[] handleLastShot(HttpExchange ex) throws IOException {
+        Path dir = FMLPaths.GAMEDIR.get().resolve("screenshots");
+        Path newest = null;
+        try (var stream = Files.list(dir)) {
+            var it = stream.filter(p -> {
+                String n = p.getFileName().toString();
+                return n.startsWith("daotcompat_") && n.endsWith(".png");
+            }).iterator();
+            while (it.hasNext()) {
+                Path p = it.next();
+                if (newest == null || p.toFile().lastModified() > newest.toFile().lastModified()) {
+                    newest = p;
+                }
+            }
+        } catch (Throwable t) {
+            return null;
+        }
+        if (newest == null) return null;
+        ex.setAttribute("shotName", newest.getFileName().toString());
+        return Files.readAllBytes(newest);
+    }
+
     private static String jarVersion() {
-        return "1.2.4";
+        return "1.2.5";
     }
 
     private static void respond(HttpExchange ex, int code, String body) {
