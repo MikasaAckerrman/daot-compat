@@ -126,28 +126,43 @@ public final class RagdollLink {
     /**
      * BODY_SYNC (v2.0.0): the player runs UNSEATED — full native AOT physics on the player
      * entity — while the visible ragdoll body is a Sable sublevel that knows nothing about the
-     * ODM. This mirror converges the body's linear velocity onto the player's every tick (the
-     * client reports the player's true velocity), so the ragdoll rides the player's rope
-     * trajectory instead of tumbling on its own.
+     * ODM. This is a P-controller on BOTH velocity and position: converge the body's linear
+     * velocity onto the player's every tick (the client reports the player's true velocity),
+     * plus a positional correction term, so the ragdoll rides the player's rope trajectory
+     * instead of drifting away (velocity-only matching accumulates position error — the body
+     * carries its OWN gravity from Sable on top of the player's, and contact solves can leave
+     * it snagged behind; the position term reels it back).
      */
+    private static final double BODY_POS_GAIN = 0.25D;
+
     private static void bodySync(ServerPlayer player, Vec3 playerVel) {
         if (!player.isAlive() || !RagdollAPI.isRagdolled(player)) return;
         dev.ryanhcode.sable.sublevel.ServerSubLevel body = ragdollBody(player);
         if (body == null) return;
+        Vec3 bodyPos = null;
+        try {
+            bodyPos = body.logicalPose().transformPosition(Vec3.ZERO);
+            if (bodyPos != null && (!Double.isFinite(bodyPos.x) || !Double.isFinite(bodyPos.y)
+                    || !Double.isFinite(bodyPos.z))) bodyPos = null;
+        } catch (Throwable ignored) {
+        }
         try {
             var handle = dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle.of(body);
             org.joml.Vector3d current = new org.joml.Vector3d();
             handle.getLinearVelocity(current);
-            // Snappier than the old rope bridge: this must track a live swing, and both sides
-            // carry the same physics; ±6 m/s per axis per tick is still orbit-proof.
-            double dx = org.joml.Math.clamp(playerVel.x - current.x, -6.0, 6.0);
-            double dy = org.joml.Math.clamp(playerVel.y - current.y, -6.0, 6.0);
-            double dz = org.joml.Math.clamp(playerVel.z - current.z, -6.0, 6.0);
+            // Position error feedback (blocks): pulls the body back onto the player's track.
+            Vec3 toPlayer = bodyPos != null ? player.position().subtract(bodyPos) : Vec3.ZERO;
+            // Snappy but orbit-proof: ±6 m/s per axis per tick.
+            double dx = org.joml.Math.clamp(playerVel.x - current.x + BODY_POS_GAIN * toPlayer.x, -6.0, 6.0);
+            double dy = org.joml.Math.clamp(playerVel.y - current.y + BODY_POS_GAIN * toPlayer.y, -6.0, 6.0);
+            double dz = org.joml.Math.clamp(playerVel.z - current.z + BODY_POS_GAIN * toPlayer.z, -6.0, 6.0);
             handle.addLinearAndAngularVelocity(new org.joml.Vector3d(dx, dy, dz), new org.joml.Vector3d(0, 0, 0));
             com.armorberserk.daotcompat.util.LogThrottle.info("body-sync", 5,
                     String.format(java.util.Locale.ROOT,
-                            "player vel (%.1f, %.1f, %.1f) | body vel (%.1f, %.1f, %.1f) | dv (%.1f, %.1f, %.1f)",
-                            playerVel.x, playerVel.y, playerVel.z, current.x, current.y, current.z, dx, dy, dz));
+                            "player vel (%.1f, %.1f, %.1f) | body vel (%.1f, %.1f, %.1f) | pos gap %s | dv (%.1f, %.1f, %.1f)",
+                            playerVel.x, playerVel.y, playerVel.z, current.x, current.y, current.z,
+                            bodyPos != null ? String.format(java.util.Locale.ROOT, "%.1f", toPlayer.length()) : "?",
+                            dx, dy, dz));
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("[ragdoll] body sync failed", t);
         }

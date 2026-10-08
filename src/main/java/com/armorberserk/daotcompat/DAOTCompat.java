@@ -14,6 +14,7 @@ import com.armorberserk.daotcompat.input.RagdollKeybinds;
 import com.armorberserk.daotcompat.network.DaotNetworking;
 import com.armorberserk.daotcompat.ragdoll.RagdollCameraSync;
 import com.armorberserk.daotcompat.ragdoll.RagdollClient;
+import com.armorberserk.daotcompat.ragdoll.RagdollLink;
 import com.armorberserk.daotcompat.ragdoll.RagdollWorldTracker;
 import com.armorberserk.daotcompat.spear.ThunderSpearClientFollower;
 import com.armorberserk.daotcompat.spear.ThunderSpearFollower;
@@ -72,6 +73,17 @@ public final class DAOTCompat {
         NeoForge.EVENT_BUS.addListener((dev.leo.sableplayerragdoll.api.RagdollEndEvent event) ->
                 LOGGER.info("[ragdoll] ENDED for {} reason {}", event.player().getGameProfile().getName(),
                         event.reason()));
+
+        // v2.0.0: the ragdoll runs UNSEATED, so the player WOULD take vanilla fall damage on
+        // the crash landing (a seated passenger never did) — the ragdoll itself is the "impact
+        // absorbed" state, so cancel the fall damage while a ragdoll session is live.
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.entity.living.LivingFallEvent event) -> {
+            if (RagdollLink.available()
+                    && event.getEntity() instanceof net.minecraft.server.level.ServerPlayer serverPlayer
+                    && dev.leo.sableplayerragdoll.api.RagdollAPI.isRagdolled(serverPlayer)) {
+                event.setCanceled(true);
+            }
+        });
 
         // Client: a LOWEST-priority post-client-tick pass catches hooks that AOT fires
         // during its own ClientTickEvent (which runs AFTER LocalPlayer.tick). Correcting
@@ -206,7 +218,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.0.0: unseated ragdoll — native AOT physics through the ragdoll, BODY_SYNC visual, wire-break detector)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.0.1: unseated ragdoll + P-controller body sync + fall-damage absorb)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */

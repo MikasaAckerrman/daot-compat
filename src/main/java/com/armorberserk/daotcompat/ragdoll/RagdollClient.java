@@ -60,16 +60,17 @@ public final class RagdollClient {
 
     /**
      * LIVE check "is the local player ragdolled right now", via the patch mod's client-safe
-     * {@code RagdollPlayerState.isRagdolled(Player)}. Falls back to the 30s trigger window when
-     * the patch is absent. This is what gates auto-exit-on-re-hook, Shift-in-air exit and the
-     * sound suppression — none of them should silently expire after 30 seconds.
+     * {@code RagdollPlayerState.isRagdolled(Player)}. Since v2.0.0 our own sessions run UNSEATED
+     * (autoSeat(false)) — if the patch's state only tracks seated players it would say false and
+     * the whole client ragdoll loop would die, so a TRUE patch verdict is authoritative while
+     * our own 30s trigger window acts as the fallback for unseated sessions.
      */
     public static boolean isRagdolledLive() {
         LocalPlayer player = DAOTCompat.minecraft().player;
         if (player == null) return false;
         if (PATCH_AVAILABLE && PATCH_IS_RAGDOLLED != null) {
             try {
-                return (boolean) PATCH_IS_RAGDOLLED.invoke(null, player);
+                if ((boolean) PATCH_IS_RAGDOLLED.invoke(null, player)) return true;
             } catch (Throwable ignored) {
             }
         }
