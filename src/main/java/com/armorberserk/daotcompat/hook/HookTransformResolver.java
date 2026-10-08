@@ -121,20 +121,9 @@ public final class HookTransformResolver {
             if (notFinite(local)) return;
             DynamicHookMap.put(hook, new DynamicHookData(id, local, level.dimension()));
             DAOTCompat.LOGGER.info("[hook] ANCHORED on sub-level {} at local {}", id, local);
-            // v1.4.0: while the rope-force bridge is enabled a re-hook mid-ragdoll no longer
-            // exits instantly — ROPE_FORCE pulls the ragdoll body to the anchor first, and the
-            // post-tick pass exits once the body arrives (ragdollArriveRadius). The old
-            // instant-exit released the body within the same tick, so it tumbled on its own
-            // trajectory while the (invisible) player hung on the rope — the reported bug.
-            if (RagdollClient.isRagdolledLive()) {
-                if (DaotConfig.RAGDOLL_FORCE_ENABLED.get()) {
-                    DAOTCompat.LOGGER.info("[hook] re-hooked while ragdolled -> rope-force holds the ragdoll until the body arrives");
-                } else {
-                    RagdollClient.clearRagdollWindow();
-                    RagdollClient.exit();
-                    DAOTCompat.LOGGER.info("[hook] re-hooked in air while ragdolled -> exiting ragdoll (rope-force disabled)");
-                }
-            }
+            // No ragdoll exit here: v1.6.0 handles a latched hook mid-ragdoll in the post-tick
+            // pass (DAOTCompat) — RECOVER hands the body's crash momentum to the player and
+            // Danny's AOT physics takes over from there.
             return;
         }
         // Nothing at the reported point - it may already be a raw plot coordinate.

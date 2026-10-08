@@ -183,28 +183,16 @@ public final class RagdollClient {
     }
 
     /**
-     * Rope bridge, sent every client tick while ragdolled with a sub-level-hook anchored: the
-     * payload carries the hook's corrected WORLD position. The server pulls the ragdoll physics
-     * body toward that point — this is what makes the ODM gear drag your ragdoll body.
+     * RECOVER (v1.6.0): a hook latched while ragdolled. The server reads the physics body's
+     * position and linear velocity (the crash momentum), ends the ragdoll session and hands
+     * both to the player — from that tick Danny's AOT physics owns the swing, gas and reel.
      */
-    public static void sendRopeForce(Vec3 anchorWorldPos) {
-        sendRope(RagdollTriggerPayload.Action.ROPE_FORCE, anchorWorldPos);
-    }
-
-    /**
-     * Winch request, sent while the player HOLDS Shift (AOT's reel-in) with a rope attached:
-     * the server shortens the rope and hoists the ragdoll body toward the anchor.
-     */
-    public static void sendRopeReel(Vec3 anchorWorldPos) {
-        sendRope(RagdollTriggerPayload.Action.ROPE_REEL, anchorWorldPos);
-    }
-
-    private static void sendRope(RagdollTriggerPayload.Action action, Vec3 anchorWorldPos) {
+    public static void sendRecover() {
         if (!enabled() || !isRagdolledLive()) return;
         LocalPlayer player = DAOTCompat.minecraft().player;
         if (player == null) return;
         PacketDistributor.sendToServer(new RagdollTriggerPayload(
-                action, anchorWorldPos.x, anchorWorldPos.y, anchorWorldPos.z));
+                RagdollTriggerPayload.Action.RECOVER, 0.0D, 0.0D, 0.0D));
     }
 
     private static void markRagdollTriggered() {

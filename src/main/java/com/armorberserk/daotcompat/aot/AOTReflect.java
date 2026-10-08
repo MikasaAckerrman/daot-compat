@@ -28,6 +28,8 @@ public final class AOTReflect {
     private static Method rightHook;
     private static Field position;
     private static Field active;
+    private static Field extending;
+    private static Field retracting;
     private static Field hookedEntity;
     private static Method releaseFn;
 
@@ -51,6 +53,8 @@ public final class AOTReflect {
         try {
             position = hookPoint.getField("position");
             active = hookPoint.getField("active");
+            extending = hookPoint.getField("isExtending");
+            retracting = hookPoint.getField("isRetracting");
             hookedEntity = hookPoint.getField("hookedEntity");
             releaseFn = hookPoint.getMethod("release");
             leftHook = tickHandler.getMethod("getLeftHook");
@@ -103,6 +107,19 @@ public final class AOTReflect {
         if (!isAvailable() || hook == null) return false;
         try {
             return active.getBoolean(hook);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * A hook that has actually latched (not mid-flight, not retracting) — the trigger for
+     * handing crash momentum over to the player (see RagdollLink.recover).
+     */
+    public static boolean isLatched(@Nullable Object hook) {
+        if (!isAvailable() || hook == null) return false;
+        try {
+            return active.getBoolean(hook) && !extending.getBoolean(hook) && !retracting.getBoolean(hook);
         } catch (Throwable t) {
             return false;
         }

@@ -4,6 +4,7 @@
  */
 package com.armorberserk.daotcompat.network;
 
+import com.armorberserk.daotcompat.ragdoll.RagdollRecoverPayload;
 import com.armorberserk.daotcompat.ragdoll.RagdollTriggerPayload;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -17,10 +18,14 @@ public final class DaotNetworking {
     private DaotNetworking() {}
 
     public static void onRegisterPayloads(RegisterPayloadHandlersEvent event) {
-        PayloadRegistrar registrar = event.registrar("1");
+        PayloadRegistrar registrar = event.registrar("2");
         registrar.playToServer(
                 RagdollTriggerPayload.TYPE,
                 RagdollTriggerPayload.STREAM_CODEC,
                 RagdollTriggerPayload::handle);
+        registrar.playToClient(
+                RagdollRecoverPayload.TYPE,
+                RagdollRecoverPayload.STREAM_CODEC,
+                RagdollRecoverPayload::handle);
     }
 }
