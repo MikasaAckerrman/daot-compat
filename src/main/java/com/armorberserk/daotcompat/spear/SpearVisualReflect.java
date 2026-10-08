@@ -44,9 +44,16 @@ public final class SpearVisualReflect {
         if (probed) return activeSpearsField != null;
         probed = true;
         try {
-            Class<?> tracker = Class.forName("daot.FlyingThunderSpearTracker");
+            // Cross-loader lookup: AOT ships through Sinytra Connector, so a plain
+            // Class.forName on our own loader may not see it (Reflect.find scans the
+            // reachable loaders — same rule as every other AOT touchpoint in this mod).
+            Class<?> tracker = com.armorberserk.daotcompat.aot.Reflect.find("daot.FlyingThunderSpearTracker");
+            Class<?> flyingSpear = com.armorberserk.daotcompat.aot.Reflect.find("daot.FlyingThunderSpearTracker$FlyingSpear");
+            if (tracker == null || flyingSpear == null) {
+                DAOTCompat.LOGGER.debug("[spear-visual] FlyingThunderSpearTracker not found in any loader");
+                return false;
+            }
             activeSpearsField = tracker.getField("activeSpears");
-            Class<?> flyingSpear = Class.forName("daot.FlyingThunderSpearTracker$FlyingSpear");
             for (Field f : flyingSpear.getDeclaredFields()) {
                 if (Modifier.isStatic(f.getModifiers())) continue;
                 f.setAccessible(true);

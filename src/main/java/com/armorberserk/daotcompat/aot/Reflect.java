@@ -12,13 +12,17 @@ import org.jetbrains.annotations.Nullable;
  * Sinytra Connector, which can place its classes in a loader other than ours, so a plain
  * {@code Class.forName} on our own loader is not enough. Uses a common Mojang class for the
  * game loader so this stays safe on a dedicated server (no client-only references).
+ *
+ * <p>Public since v2.0.2: {@code SpearVisualReflect} (in the {@code spear} package) needs the
+ * same cross-loader lookup — a plain {@code Class.forName} there could silently miss AOT's
+ * Connector classloader and kill the whole visual spear carry.
  */
-final class Reflect {
+public final class Reflect {
 
     private Reflect() {}
 
     @Nullable
-    static Class<?> find(String name) {
+    public static Class<?> find(String name) {
         ClassLoader[] loaders = {
                 Thread.currentThread().getContextClassLoader(),
                 Entity.class.getClassLoader(),

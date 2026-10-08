@@ -118,9 +118,17 @@ public final class ThunderSpearFollower {
                 // координат корабля (±20 млн блоков), findContaining там ничего не находит.
                 SubLevel plotSl = recoverPlotFrame(level, pos);
                 if (plotSl == null) return; // stuck in ordinary terrain or a titan - AOT handles those
-                anchor = new DynamicHookData(plotSl.getUniqueId(), pos, level.dimension());
+                UUID plotId = plotSl.getUniqueId();
+                if (plotId == null) return;
+                Vec3 world;
+                try {
+                    world = plotSl.logicalPose().transformPosition(pos);
+                } catch (Throwable t) {
+                    return;
+                }
+                if (notFinite(world)) return;
+                anchor = new DynamicHookData(plotId, pos, level.dimension());
                 ANCHORS.put(entity, new TrackedAnchor(anchor, tickCounter));
-                Vec3 world = plotSl.logicalPose().transformPosition(pos);
                 LAST_WORLD_POS.put(entity, world);
                 // Телепортируем сущность из plot-пространства в мировые координаты — setPos
                 // недостаточно для синхронизации клиента при скачке с 20M координат.

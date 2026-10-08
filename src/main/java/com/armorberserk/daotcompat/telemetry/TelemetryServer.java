@@ -46,16 +46,19 @@ public final class TelemetryServer {
     /** Starts the endpoint once; call lazily (first client tick), after configs are loaded. */
     public static synchronized void start() {
         if (startAttempted || server != null) return;
-        startAttempted = true;
-        if (!DaotConfig.TELEMETRY_ENABLED.get()) {
-            DAOTCompat.LOGGER.info("[telemetry] disabled in config");
-            return;
-        }
+        boolean enabled;
         int port;
         try {
+            enabled = DaotConfig.TELEMETRY_ENABLED.get();
             port = DaotConfig.TELEMETRY_PORT.get();
         } catch (Throwable t) {
-            DAOTCompat.LOGGER.warn("[telemetry] port not readable yet: {}", t.toString());
+            // Configs not loaded yet (first tick raced the config load): retry on a later
+            // tick instead of latching startAttempted and killing telemetry for the session.
+            return;
+        }
+        startAttempted = true;
+        if (!enabled) {
+            DAOTCompat.LOGGER.info("[telemetry] disabled in config");
             return;
         }
         try {
@@ -287,7 +290,7 @@ public final class TelemetryServer {
     }
 
     private static String jarVersion() {
-        return "1.2.9";
+        return "1.2.10";
     }
 
     private static void respond(HttpExchange ex, int code, String body) {

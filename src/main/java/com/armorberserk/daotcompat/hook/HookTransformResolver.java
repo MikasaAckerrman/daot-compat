@@ -121,9 +121,9 @@ public final class HookTransformResolver {
             if (notFinite(local)) return;
             DynamicHookMap.put(hook, new DynamicHookData(id, local, level.dimension()));
             DAOTCompat.LOGGER.info("[hook] ANCHORED on sub-level {} at local {}", id, local);
-            // No ragdoll exit here: v1.6.0 handles a latched hook mid-ragdoll in the post-tick
-            // pass (DAOTCompat) — RECOVER hands the body's crash momentum to the player and
-            // Danny's AOT physics takes over from there.
+            // No ragdoll handling here: since v2.0.0 our ragdolls run UNSEATED — the player
+            // keeps full native AOT physics through the session and the latched rope just
+            // keeps swinging; the body is carried by BODY_SYNC, nothing to hand off.
             return;
         }
         // Nothing at the reported point - it may already be a raw plot coordinate.

@@ -191,6 +191,9 @@ public final class DAOTCompat {
                         }
                     } else {
                         // Stunned: pinned, ODM suppressed — kill the gear's looping drone.
+                        // restTicks reset: the rest window must not count pre-stun ticks
+                        // towards the post-stun auto-exit.
+                        restTicks = 0;
                         RagdollClient.stopOdmSounds();
                     }
                     RagdollCameraSync.sync();
@@ -218,7 +221,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.0.1: unseated ragdoll + P-controller body sync + fall-damage absorb)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.0.2: full review pass — 6 defects fixed across spears, mixin scope, telemetry start)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */
