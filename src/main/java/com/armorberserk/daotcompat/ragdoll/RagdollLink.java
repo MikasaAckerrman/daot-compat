@@ -144,8 +144,15 @@ public final class RagdollLink {
      * instead of drifting away (velocity-only matching accumulates position error — the body
      * carries its OWN gravity from Sable on top of the player's, and contact solves can leave
      * it snagged behind; the position term reels it back).
+     *
+     * <p>The body's world position is the center of its world-space bounding box
+     * ({@code subLevel.boundingBox()} — the same world frame queryIntersecting uses, proven by
+     * the hook anchoring). NEVER logicalPose().transformPosition(ZERO): that maps the plot
+     * slot's origin, which for ragdoll parts lives at ±20M — the v1.2.9 garbage value that
+     * flung the body into the void (pos gap 28,976,141, live data).
      */
     private static final double BODY_POS_GAIN = 0.25D;
+    private static final double MAX_PLAUSIBLE_GAP_SQR = 500.0D * 500.0D;
 
     private static void bodySync(ServerPlayer player, Vec3 playerVel) {
         if (!player.isAlive() || !RagdollAPI.isRagdolled(player)) return;
@@ -153,9 +160,18 @@ public final class RagdollLink {
         if (body == null) return;
         Vec3 bodyPos = null;
         try {
-            bodyPos = body.logicalPose().transformPosition(Vec3.ZERO);
-            if (bodyPos != null && (!Double.isFinite(bodyPos.x) || !Double.isFinite(bodyPos.y)
-                    || !Double.isFinite(bodyPos.z))) bodyPos = null;
+            var bounds = body.boundingBox();
+            if (bounds != null) {
+                bodyPos = new Vec3(
+                        (bounds.minX() + bounds.maxX()) * 0.5D,
+                        (bounds.minY() + bounds.maxY()) * 0.5D,
+                        (bounds.minZ() + bounds.maxZ()) * 0.5D);
+                if (!Double.isFinite(bodyPos.x) || !Double.isFinite(bodyPos.y)
+                        || !Double.isFinite(bodyPos.z)) bodyPos = null;
+                else if (bodyPos.distanceToSqr(player.position()) > MAX_PLAUSIBLE_GAP_SQR) {
+                    bodyPos = null; // implausible (plot frame etc.) — velocity-only this tick
+                }
+            }
         } catch (Throwable ignored) {
         }
         try {
@@ -177,6 +193,44 @@ public final class RagdollLink {
                             dx, dy, dz));
         } catch (Throwable t) {
             DAOTCompat.LOGGER.debug("[ragdoll] body sync failed", t);
+        }
+    }
+
+    // ---- v2.2.0: normalize every ragdoll session to the unseated mode ----
+
+    /** Players whose ragdoll just started and still need the seat undone (queued one tick later). */
+    private static final Map<UUID, Long> PENDING_UNSEAT = new HashMap<>();
+
+    /**
+     * A ragdoll session started — ours is already unseated, foreign ones (Ragdoll Reactions
+     * impact triggers etc.) come seated. The mod queues "launch + sitDown next tick", so the
+     * undo must wait until the seat actually exists: we mark the player and process it in
+     * {@link #tickUnseat}.
+     */
+    public static void markUnseat(ServerPlayer player) {
+        if (!AVAILABLE) return;
+        PENDING_UNSEAT.put(player.getUUID(), player.level().getGameTime());
+    }
+
+    /** Call every server tick: unseat players whose fresh ragdoll session has seated them. */
+    public static void tickUnseat(net.minecraft.server.MinecraftServer server) {
+        if (!AVAILABLE || PENDING_UNSEAT.isEmpty()) return;
+        long now = server.overworld().getGameTime();
+        var it = PENDING_UNSEAT.entrySet().iterator();
+        while (it.hasNext()) {
+            var e = it.next();
+            ServerPlayer player = server.getPlayerList().getPlayer(e.getKey());
+            if (player == null || !RagdollAPI.isRagdolled(player)) {
+                it.remove();
+                continue;
+            }
+            if (player.isPassenger()) {
+                player.stopRiding();
+                DAOTCompat.LOGGER.info("[ragdoll] unseated at start — foreign session normalized to the unseated mode");
+                it.remove();
+            } else if (now - e.getValue() > 5L) {
+                it.remove(); // never seated (ours) or the session died — nothing to undo
+            }
         }
     }
 

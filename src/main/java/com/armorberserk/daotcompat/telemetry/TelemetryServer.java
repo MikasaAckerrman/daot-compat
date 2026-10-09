@@ -290,7 +290,7 @@ public final class TelemetryServer {
     }
 
     private static String jarVersion() {
-        return "1.2.13";
+        return "1.2.14";
     }
 
     private static void respond(HttpExchange ex, int code, String body) {

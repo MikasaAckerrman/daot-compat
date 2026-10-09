@@ -58,14 +58,6 @@ public final class DaotConfig {
             .comment("Smooth ragdoll -> normal transition: once you are properly flying on the ODM again (airborne, a hook latched, speed held ~0.75s), the ragdoll body converges onto you and is swapped for the player model at the same place and velocity — the body 'rises into the pilot' instead of popping away")
             .define("ragdollSmoothRecover", true);
 
-    public static final ModConfigSpec.BooleanValue RAGDOLL_TRANSITION_BLINK = BUILDER
-            .comment("First-person transition polish: a brief eyelid-blink darkening on every ragdoll mode change (in and out), hiding the irreducible model swaps (hands/viewmodel vanish and return) — the eye reads 'I blinked', not 'the world glitched'")
-            .define("ragdollTransitionBlink", true);
-
-    public static final ModConfigSpec.IntValue RAGDOLL_TRANSITION_BLINK_MS = BUILDER
-            .comment("Blink duration in milliseconds (into-ragdoll adds +100 ms for impact feel). 0 disables; tune live — the config hot-reloads")
-            .defineInRange("ragdollTransitionBlinkMs", 350, 0, 2000);
-
     public static final ModConfigSpec.BooleanValue TELEMETRY_ENABLED = BUILDER
             .comment("Live telemetry: in-game log overlay (F6) + localhost HTTP endpoint + logs/daotcompat-live.json")
             .define("telemetryEnabled", true);

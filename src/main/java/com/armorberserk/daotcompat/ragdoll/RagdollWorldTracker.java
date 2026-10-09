@@ -13,10 +13,12 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Client-side world position of the ragdoll body, for the telemetry snapshot.
  *
- * <p>Since v2.0.0 the ragdoll runs UNSEATED — there is no seat entity to project any more — so
- * the tracker picks the sub-level whose world-space origin is closest to the player (the body
- * is BODY_SYNCed to ride the player's trajectory, so "nearest to the player" is the ragdoll).
- * Wrong sub-levels project millions of blocks away, same proximity logic as recoverPlotFrame.
+ * <p>Since v2.0.0 the ragdoll runs UNSEATED — there is no seat entity to project — so the
+ * tracker picks the sub-level whose world-space bounding box center is closest to the player
+ * (the body is BODY_SYNCed to ride the player's trajectory, so "nearest to the player" is the
+ * ragdoll). Bounding boxes are world-space (proven by the hook anchoring via
+ * queryIntersecting); NEVER project the pose origin — ragdoll parts live at ±20M plot
+ * coordinates, which produced the v1.2.9 void-fling garbage.
  */
 public final class RagdollWorldTracker {
 
@@ -26,8 +28,8 @@ public final class RagdollWorldTracker {
     private RagdollWorldTracker() {}
 
     /**
-     * The ragdoll body's approximate world position, or null when no sub-level projects
-     * anywhere near the player.
+     * The ragdoll body's approximate world position (bbox center), or null when no sub-level
+     * is anywhere near the player.
      */
     @Nullable
     public static Vec3 bodyWorldPos(@Nullable Level level, Vec3 playerPos) {
@@ -38,7 +40,12 @@ public final class RagdollWorldTracker {
             if (sl == null || sl.isRemoved()) continue;
             Vec3 world;
             try {
-                world = sl.logicalPose().transformPosition(Vec3.ZERO);
+                var bounds = sl.boundingBox();
+                if (bounds == null) continue;
+                world = new Vec3(
+                        (bounds.minX() + bounds.maxX()) * 0.5D,
+                        (bounds.minY() + bounds.maxY()) * 0.5D,
+                        (bounds.minZ() + bounds.maxZ()) * 0.5D);
             } catch (Throwable t) {
                 continue;
             }
@@ -53,3 +60,4 @@ public final class RagdollWorldTracker {
         return best;
     }
 }
+

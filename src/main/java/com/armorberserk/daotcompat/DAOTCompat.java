@@ -76,6 +76,14 @@ public final class DAOTCompat {
                 LOGGER.info("[ragdoll] ENDED for {} reason {}", event.player().getGameProfile().getName(),
                         event.reason()));
 
+        // v2.2.0: a ragdoll started by ANY mod (Ragdoll Reactions impact etc.) seats the
+        // player by default — normalize every session to the unseated mode: the seat is undone
+        // the tick after the start (the mod queues sitDown for the next tick).
+        NeoForge.EVENT_BUS.addListener((dev.leo.sableplayerragdoll.api.RagdollStartEvent event) ->
+                RagdollLink.markUnseat(event.player()));
+        NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) ->
+                RagdollLink.tickUnseat(event.getServer()));
+
         // v2.0.0: the ragdoll runs UNSEATED, so the player WOULD take vanilla fall damage on
         // the crash landing (a seated passenger never did) — the ragdoll itself is the "impact
         // absorbed" state, so cancel the fall damage while a ragdoll session is live.
@@ -94,7 +102,6 @@ public final class DAOTCompat {
             modBus.addListener(RagdollKeybinds::onRegisterKeyMappings);
             modBus.addListener(InGameLogOverlay::onRegisterKeyMappings);
             modBus.addListener(InGameLogOverlay::onRegisterGuiLayers);
-            modBus.addListener(com.armorberserk.daotcompat.telemetry.TransitionBlink::onRegisterGuiLayers);
             // Log tap first: from here on every log line is visible in the HUD overlay
             // and on the localhost telemetry endpoint while the game runs.
             LogTap.attach();
@@ -167,8 +174,7 @@ public final class DAOTCompat {
 
                 if (ragdolled) {
                     if (!wasRagdolled) {
-                        // Transition INTO the ragdoll (crash): blink + a frame for the record.
-                        com.armorberserk.daotcompat.telemetry.TransitionBlink.begin(true);
+                        // Transition INTO the ragdoll (crash): a frame for the record.
                         ScreenCapture.capture("ragdoll");
                     }
                     // The ragdoll body's projected world position (nearest sub-level to the
@@ -239,8 +245,7 @@ public final class DAOTCompat {
                     RagdollCameraSync.sync();
                 } else {
                     if (wasRagdolled) {
-                        // Transition OUT of the ragdoll (smooth recover / rest / X): blink.
-                        com.armorberserk.daotcompat.telemetry.TransitionBlink.begin(false);
+                        // Transition OUT of the ragdoll (smooth recover / rest / X): a frame.
                         ScreenCapture.capture("recover");
                     }
                     restTicks = 0;
@@ -267,7 +272,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.1.2: spear subsystem night-audit — plot pre-check, dead params and stale TODOs removed)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.2.0: ALL ragdolls normalized to unseated, bbox-body position fix, blink removed)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */
