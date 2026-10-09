@@ -23,6 +23,8 @@ public final class AOTReflect {
 
     private static volatile boolean resolved;
     private static volatile boolean ready;
+    /** The wire-break/latch fields; additive — missing them must NOT disable the base layer. */
+    private static volatile boolean latchFieldsReady;
 
     private static Method leftHook;
     private static Method rightHook;
@@ -50,11 +52,11 @@ public final class AOTReflect {
             DAOTCompat.LOGGER.info("Danny's AOT not present - compatibility layer idle.");
             return;
         }
+        // Base layer: hook position/state/release. If ANY of these is gone the whole point of
+        // the compat is void, so failure here legitimately disables us.
         try {
             position = hookPoint.getField("position");
             active = hookPoint.getField("active");
-            extending = hookPoint.getField("isExtending");
-            retracting = hookPoint.getField("isRetracting");
             hookedEntity = hookPoint.getField("hookedEntity");
             releaseFn = hookPoint.getMethod("release");
             leftHook = tickHandler.getMethod("getLeftHook");
@@ -62,6 +64,16 @@ public final class AOTReflect {
             ready = true;
         } catch (Throwable t) {
             DAOTCompat.LOGGER.warn("Danny's AOT hook API has changed, disabling compat: {}", t.toString());
+            return;
+        }
+        // Latch-state fields (isExtending/isRetracting): additive for the wire-break detector
+        // and the smooth-recover gate. A renamed field degrades JUST those features.
+        try {
+            extending = hookPoint.getField("isExtending");
+            retracting = hookPoint.getField("isRetracting");
+            latchFieldsReady = true;
+        } catch (Throwable t) {
+            DAOTCompat.LOGGER.warn("AOT HookPoint latch fields (isExtending/isRetracting) missing — wire-break and latch-edge detection degrade to active-only: {}", t.toString());
         }
     }
 
@@ -114,20 +126,28 @@ public final class AOTReflect {
 
     /**
      * A hook that has actually latched (not mid-flight, not retracting) — the trigger for
-     * handing crash momentum over to the player (see RagdollLink.recover).
+     * handing crash momentum over to the player (see RagdollLink). Degrades to "active" when
+     * the latch-state fields are missing on a future AOT build.
      */
     public static boolean isLatched(@Nullable Object hook) {
         if (!isAvailable() || hook == null) return false;
         try {
+            if (!latchFieldsReady) return active.getBoolean(hook);
             return active.getBoolean(hook) && !extending.getBoolean(hook) && !retracting.getBoolean(hook);
         } catch (Throwable t) {
             return false;
         }
     }
 
+    /** Whether the latch-state fields (isExtending/isRetracting) resolved — wire-break detection needs them. */
+    public static boolean latchStateAvailable() {
+        if (!resolved) resolve();
+        return latchFieldsReady;
+    }
+
     /** True while the hook is reeling itself back in (a manual retract, NOT a wire break). */
     public static boolean isRetracting(@Nullable Object hook) {
-        if (!isAvailable() || hook == null) return false;
+        if (!isAvailable() || hook == null || !latchFieldsReady) return false;
         try {
             return retracting.getBoolean(hook);
         } catch (Throwable t) {

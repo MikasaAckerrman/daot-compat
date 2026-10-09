@@ -154,7 +154,9 @@ public final class DAOTCompat {
                 // Titan wire-break (AOT's own "Wire broke!" path, titanWireBreakCooldowns in
                 // ODMTickHandler): a hook that was latched and goes inactive WITHOUT retracting
                 // had its cable cut. At speed that is a hard crash — ragdoll, momentum intact.
-                if (!ragdolled && !RagdollClient.isStunned()) {
+                // Requires the latch-state fields; without them a manual retract would be
+                // indistinguishable from a cut, so the detector stays off (degraded mode).
+                if (!ragdolled && !RagdollClient.isStunned() && AOTReflect.latchStateAvailable()) {
                     boolean leftBroke = prevLeftLatched && left != null && !AOTReflect.isActive(left) && !prevLeftRetracting;
                     boolean rightBroke = prevRightLatched && right != null && !AOTReflect.isActive(right) && !prevRightRetracting;
                     if (leftBroke || rightBroke) {
@@ -272,7 +274,7 @@ public final class DAOTCompat {
             });
         }
 
-        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.2.0: ALL ragdolls normalized to unseated, bbox-body position fix, blink removed)");
+        LOGGER.info("DAOT Aeronautics Compat by armorberserk loaded (v2.2.1: review pass 2 — resilient AOT resolve, dead bridge removed)");
     }
 
     /** Static accessor for client-side helpers that need the game instance. */
